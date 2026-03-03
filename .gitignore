@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Secrets — NEVER commit these
+.env
+credentials.json
+token.json
+*.pem
+*.key
+*.p12
+service_account*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude Code session data
+.claude/
+
+# Misc
+node_modules/
+logs/
+*.log

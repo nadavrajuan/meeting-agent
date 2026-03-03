@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Agent</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+  .sidebar { width: 220px; background: #1e293b; height: 100vh; position: fixed; left: 0; top: 0; padding: 20px 0; display: flex; flex-direction: column; }
+  .sidebar-logo { padding: 0 20px 20px; font-size: 18px; font-weight: 700; color: #6366f1; border-bottom: 1px solid #334155; }
+  .nav-item { padding: 12px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #94a3b8; transition: all 0.15s; }
+  .nav-item:hover, .nav-item.active { background: #334155; color: #e2e8f0; }
+  .nav-item.active { border-left: 3px solid #6366f1; }
+  .main { margin-left: 220px; padding: 30px; min-height: 100vh; }
+  .page-title { font-size: 24px; font-weight: 700; margin-bottom: 24px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+  .card-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #f1f5f9; }
+  .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+  .btn-primary { background: #6366f1; color: white; }
+  .btn-primary:hover { background: #4f46e5; }
+  .btn-danger { background: #ef4444; color: white; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+  .btn-ghost:hover { background: #334155; color: #e2e8f0; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  input, textarea, select { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: 14px; width: 100%; outline: none; }
+  input:focus, textarea:focus, select:focus { border-color: #6366f1; }
+  textarea { min-height: 120px; resize: vertical; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #14532d; color: #4ade80; }
+  .badge-yellow { background: #713f12; color: #fbbf24; }
+  .badge-red { background: #450a0a; color: #f87171; }
+  .badge-blue { background: #1e3a5f; color: #60a5fa; }
+  .badge-purple { background: #3b1f6e; color: #a78bfa; }
+  .table { width: 100%; border-collapse: collapse; }
+  .table th { text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600; color: #64748b; border-bottom: 1px solid #334155; }
+  .table td { padding: 12px; font-size: 14px; border-bottom: 1px solid #1e293b; }
+  .table tr:hover td { background: #334155; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; margin: 2px; cursor: default; }
+  .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+  .search-bar input { flex: 1; }
+  .step-log { font-size: 12px; font-family: monospace; background: #0f172a; border-radius: 8px; padding: 12px; max-height: 400px; overflow-y: auto; }
+  .step-log .step { margin-bottom: 8px; }
+  .step-log .step.info { color: #60a5fa; }
+  .step-log .step.warning { color: #fbbf24; }
+  .step-log .step.error { color: #f87171; }
+  .prompt-editor { font-family: monospace; font-size: 13px; min-height: 300px; }
+  .stat-box { text-align: center; }
+  .stat-number { font-size: 36px; font-weight: 700; color: #6366f1; }
+  .stat-label { font-size: 13px; color: #64748b; margin-top: 4px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .modal { background: #1e293b; border-radius: 16px; padding: 28px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+  .desc-edit { width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #475569;
+    border-radius:6px; padding:8px 10px; font-size:13px; line-height:1.5;
+    resize:vertical; min-height:60px; font-family:inherit; box-sizing:border-box; }
+  .desc-edit:focus { outline:none; border-color:#6366f1; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 13px; color: #94a3b8; margin-bottom: 6px; display: block; }
+  .flex { display: flex; }
+  .gap-2 { gap: 8px; }
+  .gap-3 { gap: 12px; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .ml-auto { margin-left: auto; }
+  .text-sm { font-size: 13px; }
+  .text-muted { color: #64748b; }
+  .mt-2 { margin-top: 8px; }
+  .mt-3 { margin-top: 12px; }
+  .p-2 { padding: 8px; }
+  .rounded { border-radius: 8px; }
+  .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .loading { text-align: center; padding: 40px; color: #64748b; }
+  .empty { text-align: center; padding: 60px; color: #475569; }
+  .checkbox-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; background: #0f172a; margin-bottom: 8px; }
+  .checkbox-row input[type=checkbox] { width: auto; accent-color: #6366f1; cursor: pointer; }
+  .warning-box { background: #451a03; border: 1px solid #c2410c; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #fb923c; font-size: 13px; }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ─── Chat UI ─────────────────────────────────────────────── */
+  .chat-layout { display:flex; height:100vh; overflow:hidden; }
+  .chat-meeting-list { width:280px; background:#1e293b; border-right:1px solid #334155; display:flex; flex-direction:column; flex-shrink:0; }
+  .chat-meeting-list-header { padding:18px 16px 14px; font-size:14px; font-weight:600; color:#f1f5f9; border-bottom:1px solid #334155; }
+  .chat-meeting-item { padding:12px 16px; cursor:pointer; border-bottom:1px solid #1a2640; transition:background 0.12s; }
+  .chat-meeting-item:hover { background:#263548; }
+  .chat-meeting-item.active { background:#1e3a5f; border-left:3px solid #6366f1; }
+  .chat-meeting-name { font-size:13px; font-weight:600; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chat-meeting-date { font-size:11px; color:#64748b; margin-top:2px; }
+  .chat-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; background:#0f172a; }
+  .chat-header { padding:14px 20px; background:#1e293b; border-bottom:1px solid #334155; display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  .chat-header-title { font-size:15px; font-weight:700; color:#f1f5f9; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chat-header-meta { font-size:11px; color:#64748b; white-space:nowrap; }
+  .chat-messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
+  .chat-messages::-webkit-scrollbar { width:4px; }
+  .chat-messages::-webkit-scrollbar-track { background:transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
+  .chat-bubble { max-width:78%; padding:12px 16px; border-radius:14px; font-size:13px; line-height:1.65; animation:slideUp 0.18s ease; }
+  .chat-bubble.user { align-self:flex-end; background:#6366f1; color:#fff; border-bottom-right-radius:4px; }
+  .chat-bubble.assistant { align-self:flex-start; background:#1e293b; color:#e2e8f0; border-bottom-left-radius:4px; border:1px solid #334155; }
+  .chat-bubble.assistant p { margin:4px 0; }
+  .chat-bubble.assistant h1,.chat-bubble.assistant h2,.chat-bubble.assistant h3 { color:#f1f5f9; margin:10px 0 4px; }
+  .chat-bubble.assistant ul,.chat-bubble.assistant ol { padding-left:20px; margin:4px 0; }
+  .chat-bubble.assistant li { margin-bottom:3px; }
+  .chat-bubble.assistant strong { color:#f1f5f9; }
+  .chat-bubble.assistant a { color:#818cf8; }
+  .chat-bubble.assistant code { background:#0f172a; padding:1px 5px; border-radius:3px; font-size:12px; font-family:monospace; }
+  .chat-bubble.assistant hr { border:none; border-top:1px solid #334155; margin:10px 0; }
+  .chat-tool-used { align-self:flex-start; display:flex; align-items:center; gap:6px; font-size:11px; color:#64748b; background:#1a2640; padding:4px 10px; border-radius:6px; border:1px solid #1e3a5f; }
+  .chat-doc-link { align-self:flex-start; display:flex; align-items:center; gap:6px; font-size:12px; color:#818cf8; background:#1e293b; padding:6px 12px; border-radius:8px; border:1px solid #334155; text-decoration:none; transition:background 0.12s; }
+  .chat-doc-link:hover { background:#263548; }
+  .chat-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#334155; text-align:center; gap:10px; }
+  .chat-empty-icon { font-size:48px; }
+  .chat-empty-title { font-size:16px; font-weight:600; color:#475569; }
+  .chat-empty-sub { font-size:13px; color:#334155; max-width:280px; line-height:1.6; }
+  .chat-input-row { padding:16px 20px; background:#1e293b; border-top:1px solid #334155; display:flex; gap:10px; align-items:flex-end; flex-shrink:0; }
+  .chat-input { flex:1; background:#0f172a; border:1px solid #334155; color:#e2e8f0; border-radius:10px; padding:10px 14px; font-size:13px; resize:none; min-height:40px; max-height:140px; outline:none; font-family:inherit; line-height:1.5; }
+  .chat-input:focus { border-color:#6366f1; }
+  .chat-send-btn { background:#6366f1; color:#fff; border:none; border-radius:10px; padding:10px 18px; font-size:13px; font-weight:600; cursor:pointer; flex-shrink:0; transition:background 0.12s; }
+  .chat-send-btn:hover:not(:disabled) { background:#4f46e5; }
+  .chat-send-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .chat-typing { align-self:flex-start; background:#1e293b; border:1px solid #334155; border-radius:14px; border-bottom-left-radius:4px; padding:10px 16px; display:flex; gap:5px; align-items:center; }
+  .chat-typing span { width:6px; height:6px; background:#6366f1; border-radius:50%; animation:pulse 1.2s ease infinite; }
+  .chat-typing span:nth-child(2) { animation-delay:0.2s; }
+  .chat-typing span:nth-child(3) { animation-delay:0.4s; }
+
+  /* Flow diagram */
+  .flow-wrap { display: flex; flex-direction: column; align-items: center; padding: 16px 0; }
+  .flow-node { display: flex; align-items: center; gap: 14px; border-radius: 14px; padding: 14px 22px; min-width: 280px; max-width: 380px; width: 100%; border: 2px solid; transition: box-shadow 0.2s; }
+  .flow-node:hover { box-shadow: 0 0 24px 2px var(--glow); }
+  .flow-node-icon { font-size: 22px; border-radius: 10px; padding: 8px 10px; flex-shrink: 0; }
+  .flow-node-label { font-weight: 600; font-size: 14px; }
+  .flow-node-sub { font-size: 11px; margin-top: 3px; opacity: 0.7; }
+  .flow-arrow { display: flex; flex-direction: column; align-items: center; margin: 2px 0; }
+  .flow-arrow-line { width: 2px; height: 22px; background: #334155; }
+  .flow-arrow-head { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 10px solid #334155; }
+  .flow-loop-badge { display: flex; align-items: center; gap: 6px; background: #1a1a2e; border: 1px dashed #7c3aed; border-radius: 20px; padding: 4px 14px; font-size: 11px; color: #a78bfa; margin: 4px 0; align-self: flex-end; margin-right: 40px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const API = '/api';
+
+const fetch_ = async (path, opts = {}) => {
+  const res = await fetch(API + path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
+const { useState, useEffect, useCallback } = React;
+
+// ─── Nav ──────────────────────────────────────────────────────────────────────
+function Sidebar({ page, setPage }) {
+  const items = [
+    { id: 'dashboard', label: '📊 Dashboard' },
+    { id: 'meetings', label: '📋 Meetings' },
+    { id: 'chat', label: '💬 Chat' },
+    { id: 'people', label: '👥 People' },
+    { id: 'labels', label: '🏷️ Labels' },
+    { id: 'prompts', label: '✏️ Prompts' },
+    { id: 'runs', label: '🤖 Agent Runs' },
+    { id: 'context', label: '📝 Context Notes' },
+    { id: 'graph', label: '🕸️ Flow' },
+  ];
+  return (
+    <div className="sidebar">
+      <div className="sidebar-logo">🎙️ Meeting Agent</div>
+      {items.map(i => (
+        <div key={i.id} className={`nav-item ${page === i.id ? 'active' : ''}`} onClick={() => setPage(i.id)}>
+          {i.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Delete DB Modal ──────────────────────────────────────────────────────────
+function DeleteDBModal({ onClose, onDeleted }) {
+  const [deletePeople, setDeletePeople] = useState(false);
+  const [deleteLabels, setDeleteLabels] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const doDelete = async () => {
+    setLoading(true);
+    try {
+      await fetch_('/db', {
+        method: 'DELETE',
+        body: JSON.stringify({ delete_people: deletePeople, delete_labels: deleteLabels }),
+      });
+      onDeleted();
+      onClose();
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 480 }}>
+        <div className="modal-title">🗑️ Clear Database</div>
+        <div className="warning-box">
+          ⚠️ <strong>Warning:</strong> This will permanently delete all meetings, action items, and run history. This cannot be undone.
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Always deleted:</div>
+          <div className="checkbox-row" style={{ opacity: 0.6 }}>
+            <input type="checkbox" checked disabled />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Meetings & Action Items</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>All processed meetings, summaries, and action items</div>
+            </div>
+          </div>
+          <div className="checkbox-row" style={{ opacity: 0.6 }}>
+            <input type="checkbox" checked disabled />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Agent Runs & State</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>Run history and last-processed timestamp</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Optional (uncheck to keep):</div>
+          <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setDeletePeople(p => !p)}>
+            <input type="checkbox" checked={deletePeople} onChange={e => setDeletePeople(e.target.checked)} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>People & their labels</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>All people profiles and person→label assignments</div>
+            </div>
+          </div>
+          <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setDeleteLabels(p => !p)}>
+            <input type="checkbox" checked={deleteLabels} onChange={e => setDeleteLabels(e.target.checked)} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Labels</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>All label definitions (names, colors, keywords)</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button className="btn btn-ghost ml-auto" onClick={onClose}>Cancel</button>
+          <button className="btn btn-danger" onClick={doDelete} disabled={loading}>
+            {loading ? 'Deleting…' : '🗑️ Delete Now'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function Dashboard({ setPage }) {
+  const [stats, setStats] = useState(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const [settings, setSettings] = useState({
+    last_n: 1,
+    max_iterations: 1,
+    skip_email_search: false,
+    skip_action_items: false,
+    require_approval: false,
+  });
+  const [triggering, setTriggering] = useState(false);
+
+  const load = () => {
+    Promise.all([
+      fetch_('/meetings'),
+      fetch_('/people'),
+      fetch_('/labels'),
+      fetch_('/runs?limit=5'),
+    ]).then(([meetings, people, labels, runs]) => {
+      setStats({ meetings, people, labels, runs });
+    }).catch(console.error);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const trigger = async () => {
+    setTriggering(true);
+    try {
+      const body = {
+        last_n: settings.last_n || null,
+        max_iterations: settings.max_iterations,
+        skip_email_search: settings.skip_email_search,
+        skip_action_items: settings.skip_action_items,
+        require_approval: settings.require_approval,
+      };
+      await fetch_('/trigger', { method: 'POST', body: JSON.stringify(body) });
+      setTimeout(() => { load(); setPage('runs'); }, 800);
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  if (!stats) return <div className="loading">Loading...</div>;
+
+  const setSetting = (k, v) => setSettings(s => ({ ...s, [k]: v }));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
+        <div className="page-title" style={{ margin: 0 }}>Dashboard</div>
+        <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>🗑️ Clear DB</button>
+      </div>
+
+      <div className="grid-3" style={{ marginBottom: 24 }}>
+        <div className="card stat-box">
+          <div className="stat-number">{stats.meetings.length}</div>
+          <div className="stat-label">Total Meetings</div>
+        </div>
+        <div className="card stat-box">
+          <div className="stat-number">{stats.people.length}</div>
+          <div className="stat-label">People</div>
+        </div>
+        <div className="card stat-box">
+          <div className="stat-number">{stats.labels.length}</div>
+          <div className="stat-label">Labels</div>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        {/* Run Settings + Trigger */}
+        <div className="card">
+          <div className="card-title">▶ Run Agent</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Last N folders <span style={{ color: '#475569' }}>(blank = new only)</span></label>
+              <input type="number" min="1" value={settings.last_n}
+                onChange={e => setSetting('last_n', e.target.value ? parseInt(e.target.value) : '')}
+                placeholder="e.g. 1" />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Max iterations per meeting</label>
+              <input type="number" min="1" max="10" value={settings.max_iterations}
+                onChange={e => setSetting('max_iterations', parseInt(e.target.value) || 1)} />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setSetting('skip_email_search', !settings.skip_email_search)}>
+              <input type="checkbox" checked={settings.skip_email_search} onChange={e => setSetting('skip_email_search', e.target.checked)} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Skip Gmail search</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Faster — skip searching related emails</div>
+              </div>
+            </div>
+            <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setSetting('skip_action_items', !settings.skip_action_items)}>
+              <input type="checkbox" checked={settings.skip_action_items} onChange={e => setSetting('skip_action_items', e.target.checked)} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Skip action item execution</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Only summarize — skip LLM task follow-up</div>
+              </div>
+            </div>
+            <div className="checkbox-row" style={{ cursor: 'pointer', borderColor: settings.require_approval ? '#6366f1' : undefined }} onClick={() => setSetting('require_approval', !settings.require_approval)}>
+              <input type="checkbox" checked={settings.require_approval} onChange={e => setSetting('require_approval', e.target.checked)} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>Require approval before execution</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>Pause after planning — review & approve tasks in Meetings page</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2" style={{ marginTop: 14 }}>
+            <button className="btn btn-primary" onClick={trigger} disabled={triggering} style={{ flex: 1 }}>
+              {triggering ? '⏳ Triggering…' : '▶ Run Now'}
+            </button>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button className="btn btn-ghost btn-sm" onClick={() => fetch_('/trigger/daily', { method: 'POST' }).then(() => alert('Daily triggered!'))}>📅 Daily</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => fetch_('/trigger/weekly', { method: 'POST' }).then(() => alert('Weekly triggered!'))}>📆 Weekly</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Recent Runs</div>
+          {stats.runs.length === 0 && <div className="text-muted text-sm mt-2">No runs yet</div>}
+          {stats.runs.map(r => (
+            <div key={r.id} className="flex items-center gap-2 mt-2 text-sm">
+              <span className={`badge ${r.status === 'done' ? 'badge-green' : r.status === 'error' ? 'badge-red' : 'badge-yellow'}`}>{r.status}</span>
+              <span>{r.meeting_name || r.run_type}</span>
+              <span className="text-muted ml-auto">{new Date(r.started_at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {showDelete && <DeleteDBModal onClose={() => setShowDelete(false)} onDeleted={load} />}
+    </div>
+  );
+}
+
+// ─── Plan Review Modal ────────────────────────────────────────────────────────
+function PlanReviewModal({ meetingId, onClose, onExecuted }) {
+  const [plan, setPlan] = useState(null);
+  const [approvals, setApprovals] = useState({});  // { [action_item_id]: { approved, max_iterations } }
+  const [executing, setExecuting] = useState(false);
+
+  useEffect(() => {
+    fetch_(`/meetings/${meetingId}/plan`).then(data => {
+      setPlan(data);
+      // Initialize: all approved with max_iterations=1
+      const init = {};
+      (data.action_items || []).forEach(ai => {
+        init[ai.id] = { approved: true, max_iterations: ai.approved_max_iterations || 1 };
+      });
+      setApprovals(init);
+    }).catch(e => alert('Failed to load plan: ' + e.message));
+  }, [meetingId]);
+
+  const toggle = (id) => setApprovals(a => ({ ...a, [id]: { ...a[id], approved: !a[id]?.approved } }));
+  const setIter = (id, val) => setApprovals(a => ({ ...a, [id]: { ...a[id], max_iterations: val } }));
+  const setDesc = (id, text) => setApprovals(a => ({ ...a, [id]: { ...(a[id] || {}), description: text } }));
+  const approveAll = () => setApprovals(a => Object.fromEntries(Object.keys(a).map(id => [id, { ...a[id], approved: true }])));
+  const rejectAll = () => setApprovals(a => Object.fromEntries(Object.keys(a).map(id => [id, { ...a[id], approved: false }])));
+
+  const execute = async () => {
+    const approvedCount = Object.values(approvals).filter(v => v.approved).length;
+    if (approvedCount === 0 && !confirm('No tasks approved — execute anyway (will only create outputs)?')) return;
+    setExecuting(true);
+    try {
+      const payload = (plan.action_items || []).map(ai => ({
+        action_item_id: ai.id,
+        approved: approvals[ai.id]?.approved ?? true,
+        max_iterations: approvals[ai.id]?.max_iterations ?? 1,
+        description: approvals[ai.id]?.description ?? ai.description,
+      }));
+      await fetch_(`/meetings/${meetingId}/plan`, { method: 'PUT', body: JSON.stringify({ approvals: payload }) });
+      await fetch_(`/meetings/${meetingId}/execute`, { method: 'POST' });
+      onExecuted();
+      onClose();
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const feasibilityBadge = (f) => ({
+    feasible: 'badge-green', partial: 'badge-yellow', not_feasible: 'badge-red'
+  }[f] || 'badge-blue');
+
+  const outputTypeIcon = (t) => ({
+    email: '📧', document: '📄', research: '🔍', draft: '✏️',
+    code: '💻', calendar: '📅', analysis: '📊', other: '⚡',
+  }[t] || '⚡');
+
+  if (!plan) return (
+    <div className="modal-overlay">
+      <div className="modal"><div className="loading">Loading plan…</div></div>
+    </div>
+  );
+
+  const approvedCount = Object.values(approvals).filter(v => v.approved).length;
+  const totalCount = plan.action_items?.length || 0;
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ alignItems: 'stretch', padding: '24px' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#1e293b', borderRadius: 16, display: 'flex', flexDirection: 'column',
+        width: '100%', maxWidth: 920, maxHeight: '92vh', overflow: 'hidden',
+      }}>
+        {/* Fixed header */}
+        <div style={{ padding: '24px 28px 16px', borderBottom: '1px solid #334155', flexShrink: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+            📋 Plan Review
+          </div>
+          <div style={{ fontSize: 13, color: '#64748b' }}>{plan.meeting?.drive_folder_name}</div>
+
+          {plan.meeting?.summary && (
+            <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', marginTop: 14, fontSize: 13, lineHeight: 1.65, color: '#94a3b8' }}>
+              <strong style={{ color: '#e2e8f0' }}>Summary: </strong>{plan.meeting.summary}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+            <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>
+              {approvedCount} / {totalCount} tasks approved
+            </span>
+            <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={approveAll}>✅ Approve All</button>
+            <button className="btn btn-ghost btn-sm" onClick={rejectAll}>❌ Reject All</button>
+          </div>
+        </div>
+
+        {/* Scrollable task list */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(plan.action_items || []).map((ai) => {
+            const appr = approvals[ai.id] ?? { approved: true, max_iterations: 1 };
+            return (
+              <div key={ai.id} style={{
+                border: `1px solid ${appr.approved ? '#6366f1' : '#334155'}`,
+                borderRadius: 12,
+                opacity: appr.approved ? 1 : 0.5,
+                transition: 'opacity 0.15s, border-color 0.15s',
+                background: appr.approved ? '#16163a' : '#141820',
+              }}>
+                {/* Top bar: checkbox + icon + type badge + short name + meta */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 16px', borderBottom: '1px solid #1e293b',
+                }}>
+                  <input type="checkbox" checked={appr.approved} onChange={() => toggle(ai.id)}
+                    style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#6366f1', flexShrink: 0 }} />
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>{outputTypeIcon(ai.plan_output_type)}</span>
+                  {ai.plan_output_type && (
+                    <span style={{ background: '#1e3a5f', color: '#60a5fa', padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {ai.plan_output_type}
+                    </span>
+                  )}
+                  {ai.feasibility && (
+                    <span className={`badge ${feasibilityBadge(ai.feasibility)}`} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
+                      {ai.feasibility}
+                    </span>
+                  )}
+                  {ai.short_name && (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ai.short_name}
+                    </span>
+                  )}
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {[ai.assignee_name && `→ ${ai.assignee_name}`, ai.due_date].filter(Boolean).join('  ·  ')}
+                  </span>
+                </div>
+
+                {/* Description */}
+                <div style={{ padding: '14px 16px' }}>
+                  <textarea
+                    className="desc-edit"
+                    value={approvals[ai.id]?.description ?? ai.description}
+                    onChange={e => setDesc(ai.id, e.target.value)}
+                  />
+                </div>
+
+                {/* Plan notes + resources */}
+                {(ai.plan_notes || ai.plan_resources) && (
+                  <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {ai.plan_resources && (
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        <span style={{ color: '#475569' }}>🔧 Resources: </span>{ai.plan_resources}
+                      </div>
+                    )}
+                    {ai.plan_notes && (
+                      <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6, background: '#0f172a', padding: '10px 12px', borderRadius: 8 }}>
+                        {ai.plan_notes}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Max iterations */}
+                {appr.approved && (
+                  <div style={{ padding: '10px 16px', borderTop: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: '#475569' }}>Iterations:</span>
+                    {[1, 2, 3, 5].map(n => (
+                      <button key={n} onClick={() => setIter(ai.id, n)} style={{
+                        padding: '4px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: appr.max_iterations === n ? '#6366f1' : '#0f172a',
+                        color: appr.max_iterations === n ? '#fff' : '#64748b',
+                        transition: 'all 0.1s',
+                      }}>{n}×</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Fixed footer */}
+        <div style={{ padding: '16px 28px', borderTop: '1px solid #334155', display: 'flex', gap: 10, flexShrink: 0 }}>
+          <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={onClose} disabled={executing}>Cancel</button>
+          <button className="btn btn-primary" onClick={execute} disabled={executing} style={{ minWidth: 160 }}>
+            {executing ? '⏳ Starting…' : `▶ Execute ${approvedCount} Task${approvedCount !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Meetings ─────────────────────────────────────────────────────────────────
+function Meetings({ setPage, setChatMeetingId }) {
+  const [meetings, setMeetings] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [planMeetingId, setPlanMeetingId] = useState(null);
+  const [search, setSearch] = useState({ label: '', person: '', keyword: '' });
+
+  const load = useCallback(() => {
+    const params = new URLSearchParams();
+    if (search.label) params.set('label', search.label);
+    if (search.person) params.set('person', search.person);
+    if (search.keyword) params.set('keyword', search.keyword);
+    fetch_('/meetings?' + params).then(setMeetings).catch(console.error);
+  }, [search]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const statusBadge = (s, approval) => {
+    if (approval === 'awaiting_approval') return 'badge-purple';
+    return { done: 'badge-green', pending: 'badge-yellow', error: 'badge-red', processing: 'badge-blue' }[s] || 'badge-blue';
+  };
+
+  return (
+    <div>
+      <div className="page-title">Meetings</div>
+      <div className="search-bar">
+        <input placeholder="Label" value={search.label} onChange={e => setSearch(p => ({ ...p, label: e.target.value }))} />
+        <input placeholder="Person" value={search.person} onChange={e => setSearch(p => ({ ...p, person: e.target.value }))} />
+        <input placeholder="Keyword" value={search.keyword} onChange={e => setSearch(p => ({ ...p, keyword: e.target.value }))} />
+        <button className="btn btn-primary" onClick={load}>Search</button>
+      </div>
+      <div className="card">
+        <table className="table">
+          <thead>
+            <tr><th>Folder</th><th>Date</th><th>Status</th><th>Labels</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {meetings.map(m => (
+              <tr key={m.id}>
+                <td style={{ fontWeight: 500 }}>{m.drive_folder_name}</td>
+                <td className="text-muted text-sm">{m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : '—'}</td>
+                <td>
+                  <span className={`badge ${statusBadge(m.status, m.approval_status)}`}>
+                    {m.approval_status === 'awaiting_approval' ? '⏳ awaiting approval' : m.status}
+                  </span>
+                </td>
+                <td>{(m.labels || []).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}</td>
+                <td style={{ display: 'flex', gap: 6 }}>
+                  {m.approval_status === 'awaiting_approval' && (
+                    <button className="btn btn-primary btn-sm" onClick={() => setPlanMeetingId(m.id)}>
+                      📋 Review Plan
+                    </button>
+                  )}
+                  <button className="btn btn-ghost btn-sm" onClick={() => fetch_(`/meetings/${m.id}`).then(setSelected)}>View</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: '#818cf8' }} onClick={() => { setChatMeetingId(m.id); setPage('chat'); }}>💬 Chat</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {meetings.length === 0 && <div className="empty">No meetings found</div>}
+      </div>
+      {selected && <MeetingModal meeting={selected} onClose={() => setSelected(null)} />}
+      {planMeetingId && (
+        <PlanReviewModal
+          meetingId={planMeetingId}
+          onClose={() => setPlanMeetingId(null)}
+          onExecuted={() => { setPlanMeetingId(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function MeetingModal({ meeting, onClose }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-title">📋 {meeting.drive_folder_name}</div>
+        <p className="text-sm text-muted mb">{meeting.meeting_date ? new Date(meeting.meeting_date).toLocaleString() : ''}</p>
+
+        {meeting.executive_summary && (
+          <>
+            <div className="form-label" style={{ marginTop: 16 }}>Executive Summary</div>
+            <div className="text-sm" style={{ lineHeight: 1.6 }}>{meeting.executive_summary}</div>
+          </>
+        )}
+
+        {meeting.people?.length > 0 && (
+          <>
+            <div className="form-label" style={{ marginTop: 16 }}>Participants</div>
+            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+              {meeting.people.map(p => <span key={p.id} className="badge badge-blue">{p.name}</span>)}
+            </div>
+          </>
+        )}
+
+        {meeting.labels?.length > 0 && (
+          <>
+            <div className="form-label" style={{ marginTop: 16 }}>Labels</div>
+            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+              {meeting.labels.map(l => <span key={l.id} className="badge badge-purple">{l.name}</span>)}
+            </div>
+          </>
+        )}
+
+        {meeting.action_items?.length > 0 && (
+          <>
+            <div className="form-label" style={{ marginTop: 16 }}>Action Items</div>
+            {meeting.action_items.map(ai => (
+              <div key={ai.id} className="p-2 rounded mt-2" style={{ background: '#0f172a' }}>
+                <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                  <span className={`badge ${ai.status === 'done' ? 'badge-green' : 'badge-yellow'}`}>{ai.status}</span>
+                  <span className="text-sm" style={{ fontWeight: 600 }}>{ai.short_name || ai.description}</span>
+                  {ai.result_doc_url && (
+                    <a href={ai.result_doc_url} target="_blank" style={{ marginLeft: 'auto', fontSize: 12, color: '#6366f1', whiteSpace: 'nowrap' }}>
+                      📄 View Result →
+                    </a>
+                  )}
+                </div>
+                {ai.short_name && (
+                  <div className="text-muted text-sm mt-2" style={{ lineHeight: 1.5 }}>{ai.description}</div>
+                )}
+                {ai.assignee_name && <div className="text-muted text-sm mt-2">Assignee: {ai.assignee_name}</div>}
+              </div>
+            ))}
+          </>
+        )}
+
+        {meeting.output_folder_url && (
+          <div className="mt-3">
+            <a href={meeting.output_folder_url} target="_blank" style={{ color: '#6366f1' }}>📁 View Output in Google Drive →</a>
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-3">
+          <button className="btn btn-ghost ml-auto" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── People ───────────────────────────────────────────────────────────────────
+function People() {
+  const [people, setPeople] = useState([]);
+  const [labels, setLabels] = useState([]);
+  const [editing, setEditing] = useState(null);
+
+  useEffect(() => {
+    fetch_('/people').then(setPeople);
+    fetch_('/labels').then(setLabels);
+  }, []);
+
+  const save = async (person, email, notes, labelIds) => {
+    await fetch_(`/people/${person.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ email, notes, label_ids: labelIds }),
+    });
+    fetch_('/people').then(setPeople);
+    setEditing(null);
+  };
+
+  return (
+    <div>
+      <div className="page-title">People</div>
+      <div className="card">
+        <table className="table">
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Labels</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {people.map(p => (
+              <tr key={p.id}>
+                <td style={{ fontWeight: 500 }}>{p.name}</td>
+                <td className="text-muted text-sm">{p.email || '—'}</td>
+                <td>{(p.labels || []).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}</td>
+                <td><button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>Edit</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {people.length === 0 && <div className="empty">No people yet — they appear after meetings are processed</div>}
+      </div>
+      {editing && <PersonModal person={editing} labels={labels} onSave={save} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function PersonModal({ person, labels, onSave, onClose }) {
+  const [email, setEmail] = useState(person.email || '');
+  const [notes, setNotes] = useState(person.notes || '');
+  const [selectedLabels, setSelectedLabels] = useState((person.labels || []).filter(Boolean));
+
+  const toggleLabel = (name) => {
+    setSelectedLabels(prev => prev.includes(name) ? prev.filter(l => l !== name) : [...prev, name]);
+  };
+
+  const save = () => {
+    const labelIds = labels.filter(l => selectedLabels.includes(l.name)).map(l => l.id);
+    onSave(person, email, notes, labelIds);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-title">Edit: {person.name}</div>
+        <div className="form-group">
+          <label className="form-label">Email</label>
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Notes</label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Labels — assigned to all meetings this person attends</label>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap', marginTop: 8 }}>
+            {labels.map(l => (
+              <span key={l.id}
+                className="tag"
+                style={{ background: selectedLabels.includes(l.name) ? l.color : '#334155', color: '#fff', cursor: 'pointer', padding: '4px 12px', fontSize: 13 }}
+                onClick={() => toggleLabel(l.name)}
+              >{l.name}</span>
+            ))}
+          </div>
+          {labels.length === 0 && <div className="text-muted text-sm mt-2">No labels yet — create some in the Labels page</div>}
+        </div>
+        <div className="flex gap-2">
+          <button className="btn btn-ghost ml-auto" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Labels ───────────────────────────────────────────────────────────────────
+function Labels() {
+  const [labels, setLabels] = useState([]);
+  const [form, setForm] = useState({ name: '', color: '#6366f1', description: '', keywords: '' });
+
+  const load = () => fetch_('/labels').then(setLabels);
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    await fetch_('/labels', {
+      method: 'POST',
+      body: JSON.stringify({ ...form, keywords: form.keywords.split(',').map(s => s.trim()).filter(Boolean) }),
+    });
+    setForm({ name: '', color: '#6366f1', description: '', keywords: '' });
+    load();
+  };
+
+  const del = async (id) => {
+    if (!confirm('Delete label?')) return;
+    await fetch_(`/labels/${id}`, { method: 'DELETE' });
+    load();
+  };
+
+  return (
+    <div>
+      <div className="page-title">Labels</div>
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-title">Create Label</div>
+          <div className="form-group">
+            <label className="form-label">Name</label>
+            <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. AI, Product, Sales" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Color</label>
+            <div className="flex gap-2 items-center">
+              <input type="color" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} style={{ width: 40, padding: 2, height: 36 }} />
+              <input value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Auto-match Keywords (comma-separated)</label>
+            <input value={form.keywords} onChange={e => setForm(p => ({ ...p, keywords: e.target.value }))} placeholder="AI, machine learning, GPT" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+          </div>
+          <button className="btn btn-primary" onClick={create}>Create Label</button>
+        </div>
+        <div className="card">
+          <div className="card-title">All Labels</div>
+          {labels.map(l => (
+            <div key={l.id} className="flex items-center gap-2 mt-2 p-2 rounded" style={{ background: '#0f172a' }}>
+              <span className="color-dot" style={{ background: l.color }} />
+              <span style={{ fontWeight: 500 }}>{l.name}</span>
+              {(l.keywords || []).length > 0 && <span className="text-muted text-sm">({l.keywords.join(', ')})</span>}
+              <button className="btn btn-danger btn-sm ml-auto" onClick={() => del(l.id)}>Delete</button>
+            </div>
+          ))}
+          {labels.length === 0 && <div className="empty" style={{ padding: 30 }}>No labels yet</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Prompts ──────────────────────────────────────────────────────────────────
+function Prompts() {
+  const [prompts, setPrompts] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [template, setTemplate] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const load = () => fetch_('/prompts').then(ps => { setPrompts(ps); if (!selected && ps[0]) { setSelected(ps[0]); setTemplate(ps[0].template); } });
+  useEffect(() => { load(); }, []);
+
+  const select = (p) => { setSelected(p); setTemplate(p.template); setSaved(false); };
+
+  const save = async () => {
+    await fetch_(`/prompts/${selected.name}`, { method: 'PUT', body: JSON.stringify({ template }) });
+    setSaved(true);
+    load();
+  };
+
+  return (
+    <div>
+      <div className="page-title">Prompt Templates</div>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <div className="card">
+          <div className="card-title">Templates</div>
+          {prompts.map(p => (
+            <div key={p.id} className={`p-2 rounded mt-2 cursor-pointer ${selected?.id === p.id ? 'active' : ''}`}
+              style={{ background: selected?.id === p.id ? '#334155' : '#0f172a', cursor: 'pointer' }}
+              onClick={() => select(p)}>
+              <div style={{ fontWeight: 500, fontSize: 14 }}>{p.name}</div>
+              <div className="text-muted text-sm">{p.description}</div>
+            </div>
+          ))}
+        </div>
+        {selected && (
+          <div className="card">
+            <div className="flex items-center gap-2 mb">
+              <div className="card-title" style={{ margin: 0 }}>{selected.name}</div>
+              {saved && <span className="badge badge-green ml-auto">Saved ✓</span>}
+            </div>
+            <p className="text-muted text-sm" style={{ marginBottom: 12 }}>Available variables: <code style={{ color: '#a78bfa' }}>{'{transcript}'} {'{extra_instructions}'} {'{important_notes}'}</code></p>
+            <textarea className="prompt-editor" value={template} onChange={e => { setTemplate(e.target.value); setSaved(false); }} />
+            <button className="btn btn-primary mt-2" onClick={save}>Save Prompt</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Agent Runs ───────────────────────────────────────────────────────────────
+const STEP_ICONS = {
+  fetch_documents: '📥', parse_extra_context: '📄', summarize: '🤖',
+  save_to_db: '💾', search_emails: '📧', execute_tasks: '⚡',
+  create_outputs: '📁', send_email: '📨',
+};
+
+function LogEntry({ entry }) {
+  const [open, setOpen] = useState(false);
+  const levelColors = { info: '#60a5fa', warning: '#fbbf24', error: '#f87171' };
+  const color = levelColors[entry.level] || '#60a5fa';
+  const time = (entry.ts || '').replace('T', ' ').split('.')[0].split(' ')[1] || '';
+  const icon = STEP_ICONS[entry.step] || '⚙️';
+  const rawData = entry.data;
+  const hasData = rawData && (typeof rawData === 'object' ? Object.keys(rawData).length > 0 : true);
+
+  return (
+    <div style={{ borderLeft: `3px solid ${color}33`, paddingLeft: 10, marginBottom: 8 }}>
+      <div className="flex items-center gap-2" style={{ cursor: hasData ? 'pointer' : 'default' }}
+        onClick={() => hasData && setOpen(o => !o)}>
+        <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+        <span style={{ color: '#475569', fontSize: 11, fontFamily: 'monospace', flexShrink: 0 }}>{time}</span>
+        <span style={{ color: '#64748b', fontSize: 11, fontFamily: 'monospace', flexShrink: 0 }}>[{entry.step}]</span>
+        <span style={{ color, fontSize: 13 }}>{entry.detail}</span>
+        {hasData && (
+          <span style={{ color: '#6366f1', fontSize: 10, marginLeft: 'auto', flexShrink: 0, userSelect: 'none', opacity: 0.8 }}>
+            {open ? '▲ hide' : '▼ data'}
+          </span>
+        )}
+      </div>
+      {open && hasData && (
+        <div style={{ marginTop: 8, marginLeft: 4 }}>
+          {Object.entries(typeof rawData === 'object' ? rawData : { value: rawData }).map(([key, val]) => (
+            <div key={key} style={{ marginBottom: 10 }}>
+              <div style={{ color: '#a78bfa', fontSize: 10, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+                {key.replace(/_/g, ' ')}
+              </div>
+              <pre style={{
+                background: '#060b14', border: '1px solid #1e2d47', borderRadius: 6,
+                padding: '10px 14px', fontSize: 11, color: '#cbd5e1', overflowX: 'auto',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 400, overflowY: 'auto',
+                margin: 0, fontFamily: 'monospace',
+              }}>
+                {typeof val === 'string' ? val : JSON.stringify(val, null, 2)}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunDetail({ runId, runInfo, onClose }) {
+  const [entries, setEntries] = useState([]);
+  const [sinceId, setSinceId] = useState(0);
+  const [running, setRunning] = useState(true);
+  const [status, setStatus] = useState(runInfo?.status || 'running');
+  const [filter, setFilter] = useState('all');
+  const logRef = React.useRef(null);
+  const bottomRef = React.useRef(null);
+
+  const poll = React.useCallback(async (currentSinceId) => {
+    try {
+      const res = await fetch_(`/runs/${runId}/log?since_id=${currentSinceId}`);
+      if (res.entries && res.entries.length > 0) {
+        setEntries(prev => [...prev, ...res.entries]);
+        const last = res.entries[res.entries.length - 1];
+        setSinceId(last.id);
+        // Auto-scroll to bottom
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      }
+      setRunning(res.running);
+      setStatus(res.status);
+      return res.running;
+    } catch (e) {
+      return false;
+    }
+  }, [runId]);
+
+  useEffect(() => {
+    let stopped = false;
+    let currentSinceId = 0;
+
+    const loop = async () => {
+      const stillRunning = await poll(currentSinceId);
+      // Update sinceId for next poll - read from state via closure workaround
+      setSinceId(prev => { currentSinceId = prev; return prev; });
+      if (!stopped && stillRunning) {
+        setTimeout(loop, 2000);
+      }
+    };
+    loop();
+    return () => { stopped = true; };
+  }, [poll]);
+
+  const steps = [...new Set(entries.map(e => e.step))];
+  const displayed = filter === 'all' ? entries : entries.filter(e => e.step === filter);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 860, maxWidth: '97vw' }}>
+        <div className="flex items-center gap-2" style={{ marginBottom: 14 }}>
+          <div className="modal-title" style={{ margin: 0, fontSize: 17 }}>
+            🤖 Run Log
+          </div>
+          {running ? (
+            <span style={{ color: '#fbbf24', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', animation: 'pulse 1s infinite' }} />
+              Live · polling…
+            </span>
+          ) : (
+            <span className={`badge ${status === 'done' ? 'badge-green' : status === 'error' ? 'badge-red' : 'badge-blue'}`}>{status}</span>
+          )}
+          <button className="btn btn-ghost btn-sm ml-auto" onClick={onClose}>Close ✕</button>
+        </div>
+
+        {/* Step filter pills */}
+        <div className="flex gap-2 items-center" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+          <button className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter('all')}>
+            All ({entries.length})
+          </button>
+          {steps.map(s => (
+            <button key={s} className={`btn btn-sm ${filter === s ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setFilter(s)}>
+              {STEP_ICONS[s] || '⚙️'} {s} ({entries.filter(e => e.step === s).length})
+            </button>
+          ))}
+        </div>
+
+        {/* Log stream */}
+        <div ref={logRef} style={{
+          maxHeight: '65vh', overflowY: 'auto', background: '#060b14',
+          borderRadius: 10, padding: '14px 16px', border: '1px solid #1a2744',
+        }}>
+          {displayed.length === 0 && (
+            <div style={{ color: '#475569', fontSize: 13 }}>
+              {running ? '⏳ Waiting for log entries…' : 'No log entries'}
+            </div>
+          )}
+          {displayed.map((entry, i) => <LogEntry key={entry.id || i} entry={entry} />)}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Runs() {
+  const [runs, setRuns] = useState([]);
+  const [selectedRun, setSelectedRun] = useState(null);
+  const intervalRef = React.useRef(null);
+
+  const loadRuns = () => fetch_('/runs').then(setRuns).catch(console.error);
+
+  useEffect(() => {
+    loadRuns();
+    // Auto-refresh list every 4s so new/in-progress runs appear
+    intervalRef.current = setInterval(loadRuns, 4000);
+    return () => clearInterval(intervalRef.current);
+  }, []);
+
+  const statusBadge = s => ({ done: 'badge-green', error: 'badge-red', running: 'badge-yellow' }[s] || 'badge-yellow');
+  const isRunning = r => !r.ended_at;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
+        <div className="page-title" style={{ margin: 0 }}>Agent Runs</div>
+        {runs.some(isRunning) && (
+          <span style={{ color: '#fbbf24', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#fbbf24' }} />
+            Agent running…
+          </span>
+        )}
+      </div>
+      <div className="card">
+        <table className="table">
+          <thead><tr><th>Type</th><th>Meeting</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
+          <tbody>
+            {runs.map(r => {
+              const dur = r.ended_at
+                ? Math.round((new Date(r.ended_at) - new Date(r.started_at)) / 1000) + 's'
+                : isRunning(r) ? '⏱ running' : '—';
+              return (
+                <tr key={r.id} style={isRunning(r) ? { background: '#1a1a0a' } : {}}>
+                  <td><span className="badge badge-blue">{r.run_type}</span></td>
+                  <td className="text-sm">{r.meeting_name || '—'}</td>
+                  <td>
+                    {isRunning(r)
+                      ? <span style={{ color: '#fbbf24', fontSize: 12 }}>● running</span>
+                      : <span className={`badge ${statusBadge(r.status)}`}>{r.status}</span>
+                    }
+                  </td>
+                  <td className="text-muted text-sm">{new Date(r.started_at).toLocaleString()}</td>
+                  <td className="text-muted text-sm">{dur}</td>
+                  <td>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setSelectedRun(r)}>
+                      {isRunning(r) ? '📡 Live' : 'Logs'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {runs.length === 0 && <div className="empty">No runs yet</div>}
+      </div>
+      {selectedRun && (
+        <RunDetail
+          runId={selectedRun.id}
+          runInfo={selectedRun}
+          onClose={() => setSelectedRun(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Context Notes ────────────────────────────────────────────────────────────
+function ContextNotes() {
+  const [notes, setNotes] = useState([]);
+  const [form, setForm] = useState({ title: '', content: '' });
+  const [saving, setSaving] = useState(false);
+
+  const load = () => fetch_('/context-notes').then(setNotes).catch(console.error);
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!form.title.trim() || !form.content.trim()) return;
+    setSaving(true);
+    try {
+      await fetch_('/context-notes', { method: 'POST', body: JSON.stringify(form) });
+      setForm({ title: '', content: '' });
+      load();
+    } catch (e) {
+      alert('Error: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (id) => {
+    if (!confirm('Delete this context note?')) return;
+    await fetch_(`/context-notes/${id}`, { method: 'DELETE' });
+    load();
+  };
+
+  return (
+    <div>
+      <div className="page-title">Context Notes</div>
+      <p className="text-muted text-sm" style={{ marginBottom: 24, lineHeight: 1.6 }}>
+        Write context that should inform the AI when processing upcoming meetings.
+        Notes are saved as Google Docs in your extra-context folder and automatically matched
+        to meetings within a 7-day window.
+      </p>
+
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <div className="card">
+          <div className="card-title">Add Context Note</div>
+          <div className="form-group">
+            <label className="form-label">Title</label>
+            <input
+              value={form.title}
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              placeholder="e.g. Q1 Planning Context, AI Strategy Notes"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Content</label>
+            <textarea
+              value={form.content}
+              onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
+              placeholder={"Write any context, background info, or instructions that should influence how the next meeting is summarized.\n\nExample:\n- Focus on budget implications\n- Track commitments from the CEO\n- Flag any mentions of vendor X"}
+              style={{ minHeight: 200 }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btn btn-primary" onClick={save} disabled={saving || !form.title.trim() || !form.content.trim()}>
+              {saving ? 'Saving…' : '💾 Save & Upload to Drive'}
+            </button>
+          </div>
+          <p className="text-muted text-sm mt-2" style={{ fontSize: 11 }}>
+            Will be saved to your configured Google Drive extra-context folder and matched to meetings by date.
+          </p>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Saved Notes ({notes.length})</div>
+          {notes.length === 0 && (
+            <div className="empty" style={{ padding: 30 }}>No context notes yet</div>
+          )}
+          {notes.map(n => (
+            <div key={n.id} className="p-2 rounded mt-2" style={{ background: '#0f172a', border: '1px solid #334155' }}>
+              <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{n.title}</span>
+                <span className="text-muted text-sm ml-auto" style={{ flexShrink: 0 }}>
+                  {new Date(n.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <p className="text-muted text-sm" style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'hidden' }}>
+                {n.content}
+              </p>
+              <div className="flex gap-2 mt-2">
+                {n.drive_doc_url && (
+                  <a href={n.drive_doc_url} target="_blank"
+                    style={{ color: '#6366f1', fontSize: 12, textDecoration: 'none' }}>
+                    📁 View in Drive →
+                  </a>
+                )}
+                {!n.drive_doc_url && (
+                  <span className="text-muted" style={{ fontSize: 11 }}>⚠️ Drive upload failed — stored in DB only</span>
+                )}
+                <button className="btn btn-danger btn-sm ml-auto" onClick={() => del(n.id)}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Flow Diagram ─────────────────────────────────────────────────────────────
+const NODE_STYLES = {
+  input:   { bg: '#0f2744', border: '#3b82f6', iconBg: '#1e3a5f', text: '#60a5fa', glow: '#3b82f6' },
+  process: { bg: '#1a2235', border: '#475569', iconBg: '#253047', text: '#94a3b8', glow: '#475569' },
+  llm:     { bg: '#1a0f35', border: '#7c3aed', iconBg: '#2d1a6e', text: '#a78bfa', glow: '#7c3aed' },
+  output:  { bg: '#0a2520', border: '#10b981', iconBg: '#064e3b', text: '#4ade80', glow: '#10b981' },
+};
+
+function FlowNode({ icon, label, sublabel, type }) {
+  const s = NODE_STYLES[type] || NODE_STYLES.process;
+  return (
+    <div className="flow-node" style={{
+      background: s.bg, borderColor: s.border, '--glow': s.glow + '55',
+    }}>
+      <div className="flow-node-icon" style={{ background: s.iconBg }}>{icon}</div>
+      <div>
+        <div className="flow-node-label" style={{ color: s.text }}>{label}</div>
+        {sublabel && <div className="flow-node-sub" style={{ color: s.text }}>{sublabel}</div>}
+      </div>
+    </div>
+  );
+}
+
+function Arrow() {
+  return (
+    <div className="flow-arrow">
+      <div className="flow-arrow-line" />
+      <div className="flow-arrow-head" />
+    </div>
+  );
+}
+
+function GraphView() {
+  const steps = [
+    { icon: '📥', label: 'Fetch Documents', sublabel: 'Read transcript from Google Drive', type: 'input' },
+    { icon: '📄', label: 'Parse Extra Context', sublabel: 'Load context doc if configured', type: 'process' },
+    { icon: '🤖', label: 'Summarize Meeting', sublabel: 'LLM: extract summary, action items, tags', type: 'llm' },
+    { icon: '💾', label: 'Save to Database', sublabel: 'Persist meeting, people & labels', type: 'process' },
+    { icon: '📧', label: 'Search Emails', sublabel: 'Find related Gmail threads', type: 'process' },
+    { icon: '⚡', label: 'Execute Action Items', sublabel: 'LLM: follow up on each task (up to 10×)', type: 'llm', loop: true },
+    { icon: '📁', label: 'Create Drive Outputs', sublabel: 'Write summary doc to Google Drive', type: 'output' },
+    { icon: '📨', label: 'Send Email Report', sublabel: 'Email summary to configured address', type: 'output' },
+  ];
+
+  const legend = [
+    { type: 'input',   label: 'Data Input',  icon: '📥' },
+    { type: 'process', label: 'Processing',  icon: '⚙️' },
+    { type: 'llm',     label: 'LLM Call',    icon: '🤖' },
+    { type: 'output',  label: 'Output',      icon: '📤' },
+  ];
+
+  return (
+    <div>
+      <div className="page-title">Agent Flow</div>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <div className="card" style={{ padding: '24px 16px' }}>
+          <div className="flow-wrap">
+            {steps.map((step, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                {i > 0 && <Arrow />}
+                <FlowNode {...step} />
+                {step.loop && (
+                  <div className="flow-loop-badge">
+                    ↩ loops until done or max iterations
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="card">
+            <div className="card-title">Legend</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+              {legend.map(l => {
+                const s = NODE_STYLES[l.type];
+                return (
+                  <div key={l.type} className="flex items-center gap-3">
+                    <div style={{ background: s.bg, border: `2px solid ${s.border}`, borderRadius: 10, padding: '6px 12px', fontSize: 18, lineHeight: 1 }}>{l.icon}</div>
+                    <div>
+                      <div style={{ color: s.text, fontWeight: 600, fontSize: 13 }}>{l.label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: 0 }}>
+            <div className="card-title">How it works</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.8 }}>
+              <p>Each meeting folder in Google Drive triggers this pipeline once detected by the scheduler.</p>
+              <br />
+              <p><strong style={{ color: '#e2e8f0' }}>Extra context</strong> — if a matching doc exists in the configured context folder, it's injected into the prompt.</p>
+              <br />
+              <p><strong style={{ color: '#e2e8f0' }}>Person labels</strong> — labels assigned to a person are automatically applied to any meeting they attend.</p>
+              <br />
+              <p><strong style={{ color: '#e2e8f0' }}>Action item loop</strong> — the agent can iterate up to 10× to follow up on action items using email context.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Chat Page ────────────────────────────────────────────────────────────────
+
+function renderMarkdown(text) {
+  // Simple markdown → HTML for chat bubbles (inline React-safe)
+  const lines = text.split('\n');
+  const elements = [];
+  let key = 0;
+  let listItems = [];
+  let listType = null;
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    const Tag = listType === 'ol' ? 'ol' : 'ul';
+    elements.push(React.createElement(Tag, { key: key++ }, listItems.map((li, i) => React.createElement('li', { key: i }, li))));
+    listItems = [];
+    listType = null;
+  };
+
+  const inlineMd = (str) => {
+    // Bold **text**
+    str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic *text*
+    str = str.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Inline code `code`
+    str = str.replace(/`([^`]+?)`/g, '<code>$1</code>');
+    // Links [text](url)
+    str = str.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    return str;
+  };
+
+  for (const line of lines) {
+    const s = line.trim();
+    if (s === '---' || s === '***') { flushList(); elements.push(React.createElement('hr', { key: key++ })); continue; }
+    if (s.startsWith('# '))  { flushList(); elements.push(React.createElement('h1', { key: key++, dangerouslySetInnerHTML: { __html: inlineMd(s.slice(2)) } })); continue; }
+    if (s.startsWith('## ')) { flushList(); elements.push(React.createElement('h2', { key: key++, dangerouslySetInnerHTML: { __html: inlineMd(s.slice(3)) } })); continue; }
+    if (s.startsWith('### ')){ flushList(); elements.push(React.createElement('h3', { key: key++, dangerouslySetInnerHTML: { __html: inlineMd(s.slice(4)) } })); continue; }
+    if (/^[-*] /.test(s)) { if (listType !== 'ul') { flushList(); listType = 'ul'; } listItems.push(React.createElement('span', { dangerouslySetInnerHTML: { __html: inlineMd(s.slice(2)) } })); continue; }
+    if (/^\d+\. /.test(s)) { if (listType !== 'ol') { flushList(); listType = 'ol'; } listItems.push(React.createElement('span', { dangerouslySetInnerHTML: { __html: inlineMd(s.replace(/^\d+\. /, '')) } })); continue; }
+    if (!s) { flushList(); elements.push(React.createElement('br', { key: key++ })); continue; }
+    flushList();
+    elements.push(React.createElement('p', { key: key++, dangerouslySetInnerHTML: { __html: inlineMd(s) } }));
+  }
+  flushList();
+  return elements;
+}
+
+const TOOL_ICONS = { search_gmail: '📧', read_email: '📬', create_document: '📄' };
+const TOOL_LABELS = { search_gmail: 'Searched Gmail', read_email: 'Read email', create_document: 'Created document' };
+
+function ChatPage({ initialMeetingId }) {
+  const [meetings, setMeetings] = useState([]);
+  const [activeMeetingId, setActiveMeetingId] = useState(initialMeetingId || null);
+  const [activeMeeting, setActiveMeeting] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  // System prompt control
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [promptOverride, setPromptOverride] = useState(''); // what the user has typed / edited
+  const [promptLoading, setPromptLoading] = useState(false);
+  const messagesEndRef = React.useRef(null);
+
+  useEffect(() => {
+    fetch_('/meetings').then(setMeetings).catch(console.error);
+  }, []);
+
+  // When initialMeetingId changes from parent (e.g. clicking Chat on a meeting row)
+  useEffect(() => {
+    if (initialMeetingId) setActiveMeetingId(initialMeetingId);
+  }, [initialMeetingId]);
+
+  useEffect(() => {
+    if (!activeMeetingId) { setMessages([]); setActiveMeeting(null); setSystemPrompt(''); setPromptOverride(''); return; }
+    fetch_(`/meetings/${activeMeetingId}`).then(setActiveMeeting).catch(console.error);
+    fetch_(`/meetings/${activeMeetingId}/chat`).then(rows => {
+      setMessages(rows.map(r => ({
+        id: r.id, role: r.role, content: r.content,
+        tool_calls_used: r.metadata?.tool_calls_used || [],
+        doc_urls: r.metadata?.doc_urls || [],
+      })));
+    }).catch(console.error);
+    // Pre-load the resolved system prompt
+    fetch_(`/meetings/${activeMeetingId}/chat-prompt`).then(d => {
+      setSystemPrompt(d.prompt);
+      setPromptOverride(d.prompt);
+    }).catch(console.error);
+  }, [activeMeetingId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || !activeMeetingId || loading) return;
+    setInput('');
+    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: text, tool_calls_used: [], doc_urls: [] }]);
+    setLoading(true);
+    try {
+      // Send override only if user has changed it from the default
+      const override = promptOverride !== systemPrompt ? promptOverride : null;
+      const resp = await fetch_(`/meetings/${activeMeetingId}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ message: text, system_prompt_override: override }),
+      });
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: resp.response,
+        tool_calls_used: resp.tool_calls_used || [],
+        doc_urls: resp.doc_urls || [],
+      }]);
+    } catch (e) {
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1, role: 'assistant',
+        content: `Error: ${e.message}`, tool_calls_used: [], doc_urls: [],
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearHistory = async () => {
+    if (!activeMeetingId || !confirm('Clear chat history for this meeting?')) return;
+    setClearing(true);
+    try {
+      await fetch_(`/meetings/${activeMeetingId}/chat`, { method: 'DELETE' });
+      setMessages([]);
+    } finally { setClearing(false); }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  const selectMeeting = (m) => {
+    if (m.id === activeMeetingId) return;
+    setActiveMeetingId(m.id);
+    setMessages([]);
+    setInput('');
+    setShowPrompt(false);
+  };
+
+  const isPromptModified = promptOverride !== systemPrompt;
+
+  return (
+    // Fixed position: fills the space to the right of the sidebar
+    <div style={{ position: 'fixed', top: 0, left: 220, right: 0, bottom: 0, display: 'flex', overflow: 'hidden' }}>
+
+      {/* ── Meeting list ─────────────────────────────────────────── */}
+      <div className="chat-meeting-list">
+        <div className="chat-meeting-list-header">💬 Chat</div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {meetings.length === 0 && (
+            <div style={{ padding: '20px 16px', fontSize: 13, color: '#475569' }}>No meetings yet</div>
+          )}
+          {meetings.map(m => (
+            <div
+              key={m.id}
+              className={`chat-meeting-item ${activeMeetingId === m.id ? 'active' : ''}`}
+              onClick={() => selectMeeting(m)}
+            >
+              <div className="chat-meeting-name">{m.drive_folder_name}</div>
+              <div className="chat-meeting-date">
+                {m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : '—'}
+                {' · '}
+                <span
+                  className={`badge ${m.status === 'done' ? 'badge-green' : 'badge-yellow'}`}
+                  style={{ fontSize: 9, padding: '1px 5px' }}
+                >{m.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Chat panel ───────────────────────────────────────────── */}
+      <div className="chat-panel">
+        {!activeMeetingId ? (
+          <div className="chat-empty">
+            <div className="chat-empty-icon">💬</div>
+            <div className="chat-empty-title">Select a meeting to start chatting</div>
+            <div className="chat-empty-sub">
+              Ask questions, get insights, or create documents — the AI has full meeting context.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ── Header ── */}
+            <div className="chat-header">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="chat-header-title">{activeMeeting?.drive_folder_name || '…'}</div>
+                {activeMeeting?.meeting_date && (
+                  <div className="chat-header-meta">
+                    {new Date(activeMeeting.meeting_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    {activeMeeting.people?.length > 0 && ` · ${activeMeeting.people.map(p => p.name).join(', ')}`}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                {activeMeeting?.output_folder_url && (
+                  <a href={activeMeeting.output_folder_url} target="_blank"
+                    style={{ fontSize: 12, color: '#818cf8', textDecoration: 'none' }}>📁 Drive</a>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowPrompt(p => !p)}
+                  style={{ color: isPromptModified ? '#f59e0b' : '#94a3b8' }}
+                  title="View / edit system prompt"
+                >
+                  {isPromptModified ? '⚙️ Prompt*' : '⚙️ Prompt'}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={clearHistory} disabled={clearing}>
+                  {clearing ? '…' : '🗑️ Clear'}
+                </button>
+              </div>
+            </div>
+
+            {/* ── System Prompt Panel ── */}
+            {showPrompt && (
+              <div style={{
+                background: '#0f172a', borderBottom: '1px solid #334155',
+                padding: '14px 20px', flexShrink: 0,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>
+                    SYSTEM PROMPT {isPromptModified && <span style={{ color: '#f59e0b' }}>(modified)</span>}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#475569', flex: 1 }}>
+                    Edits apply to all new messages in this session. Edit the template permanently in Prompts → meeting_chat.
+                  </span>
+                  {isPromptModified && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => setPromptOverride(systemPrompt)}
+                      style={{ fontSize: 11, color: '#94a3b8' }}>
+                      ↺ Reset
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={promptOverride}
+                  onChange={e => setPromptOverride(e.target.value)}
+                  style={{
+                    width: '100%', background: '#1e293b', border: '1px solid #334155',
+                    color: '#e2e8f0', borderRadius: 8, padding: '10px 14px',
+                    fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6,
+                    resize: 'vertical', minHeight: 180, maxHeight: 340, outline: 'none',
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#6366f1'}
+                  onBlur={e => e.target.style.borderColor = '#334155'}
+                />
+              </div>
+            )}
+
+            {/* ── Messages ── */}
+            <div className="chat-messages">
+              {messages.length === 0 && !loading && (
+                <div className="chat-empty">
+                  <div className="chat-empty-icon">🎙️</div>
+                  <div className="chat-empty-title">Ready to chat</div>
+                  <div className="chat-empty-sub">
+                    Ask about the meeting, request a draft or document, or ask the AI to search your emails for context.
+                  </div>
+                </div>
+              )}
+
+              {messages.map(msg => (
+                <React.Fragment key={msg.id}>
+                  {msg.role === 'assistant' && (msg.tool_calls_used || []).map((tc, i) => (
+                    <div key={i} className="chat-tool-used">
+                      <span>{TOOL_ICONS[tc.tool] || '🔧'}</span>
+                      <span>{TOOL_LABELS[tc.tool] || tc.tool}</span>
+                      {tc.args?.query && (
+                        <span style={{ color: '#475569', fontStyle: 'italic' }}>
+                          "{tc.args.query.length > 50 ? tc.args.query.slice(0, 50) + '…' : tc.args.query}"
+                        </span>
+                      )}
+                      {tc.args?.title && (
+                        <span style={{ color: '#475569', fontStyle: 'italic' }}>"{tc.args.title}"</span>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className={`chat-bubble ${msg.role}`}>
+                    {msg.role === 'user' ? msg.content : renderMarkdown(msg.content)}
+                  </div>
+
+                  {(msg.doc_urls || []).map((url, i) => (
+                    <a key={i} href={url} target="_blank" className="chat-doc-link">
+                      📄 View created document →
+                    </a>
+                  ))}
+                </React.Fragment>
+              ))}
+
+              {loading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: '#475569', paddingLeft: 4 }}>
+                    Thinking… (may take up to a minute if searching emails)
+                  </div>
+                  <div className="chat-typing">
+                    <span /><span /><span />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* ── Input ── */}
+            <div className="chat-input-row">
+              <textarea
+                className="chat-input"
+                placeholder="Ask anything about this meeting… (Enter to send, Shift+Enter for new line)"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKey}
+                rows={1}
+                style={{
+                  height: Math.min(140, Math.max(44, (input.split('\n').length) * 24)) + 'px',
+                  overflowY: 'auto',
+                }}
+              />
+              <button
+                className="chat-send-btn"
+                onClick={send}
+                disabled={loading || !input.trim()}
+              >
+                {loading ? '⏳' : '↑'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const [chatMeetingId, setChatMeetingId] = useState(null);
+
+  return (
+    <div>
+      <Sidebar page={page} setPage={setPage} />
+      {page === 'chat' ? (
+        // Chat gets fixed full-screen layout — rendered outside .main to avoid its padding
+        <ChatPage initialMeetingId={chatMeetingId} />
+      ) : (
+        <div className="main">
+          {page === 'dashboard' && <Dashboard setPage={setPage} />}
+          {page === 'meetings'  && <Meetings setPage={setPage} setChatMeetingId={setChatMeetingId} />}
+          {page === 'people'    && <People />}
+          {page === 'labels'    && <Labels />}
+          {page === 'prompts'   && <Prompts />}
+          {page === 'runs'      && <Runs />}
+          {page === 'context'   && <ContextNotes />}
+          {page === 'graph'     && <GraphView />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
