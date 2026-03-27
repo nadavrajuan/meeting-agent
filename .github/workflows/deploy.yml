@@ -16,7 +16,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd /opt/meeting-agent
+            cd /home/ubuntu/meeting-agent
             git pull origin master
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
             docker image prune -f
