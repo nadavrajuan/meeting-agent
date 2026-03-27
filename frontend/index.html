@@ -602,7 +602,16 @@ function Meetings({ setPage, setChatMeetingId }) {
     if (search.label) params.set('label', search.label);
     if (search.person) params.set('person', search.person);
     if (search.keyword) params.set('keyword', search.keyword);
-    fetch_('/meetings?' + params).then(setMeetings).catch(console.error);
+    fetch_('/meetings?' + params).then(data => {
+      const processedAt = m => m.processed_at || m.created_at;
+      const sorted = [...data].sort((a, b) => {
+        if (!processedAt(a) && !processedAt(b)) return 0;
+        if (!processedAt(a)) return 1;
+        if (!processedAt(b)) return -1;
+        return new Date(processedAt(b)) - new Date(processedAt(a));
+      });
+      setMeetings(sorted);
+    }).catch(console.error);
   }, [search]);
 
   useEffect(() => { load(); }, [load]);
@@ -624,13 +633,13 @@ function Meetings({ setPage, setChatMeetingId }) {
       <div className="card">
         <table className="table">
           <thead>
-            <tr><th>Folder</th><th>Date</th><th>Status</th><th>Labels</th><th>Action</th></tr>
+            <tr><th>Folder</th><th>Processed</th><th>Status</th><th>Labels</th><th>Action</th></tr>
           </thead>
           <tbody>
             {meetings.map(m => (
               <tr key={m.id}>
                 <td style={{ fontWeight: 500 }}>{m.drive_folder_name}</td>
-                <td className="text-muted text-sm">{m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : '—'}</td>
+                <td className="text-muted text-sm">{(m.processed_at || m.created_at) ? new Date(m.processed_at || m.created_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                 <td>
                   <span className={`badge ${statusBadge(m.status, m.approval_status)}`}>
                     {m.approval_status === 'awaiting_approval' ? '⏳ awaiting approval' : m.status}
@@ -1711,12 +1720,70 @@ function ChatPage({ initialMeetingId }) {
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
+function GoogleAuthBanner() {
+  const [status, setStatus] = useState(null); // null=loading, true=ok, false=error
+  const [detail, setDetail] = useState('');
+  const [working, setWorking] = useState(false);
+
+  const check = () => {
+    fetch_('/auth/google/status').then(d => {
+      setStatus(d.valid);
+      setDetail(d.detail || d.reason || '');
+    }).catch(() => setStatus(false));
+  };
+
+  useEffect(() => {
+    check();
+    const t = setInterval(check, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const reauth = () => {
+    setWorking(true);
+    fetch_('/auth/google/start', { method: 'POST' }).then(d => {
+      window.open(d.auth_url, '_blank');
+      // Poll until token becomes valid
+      const poll = setInterval(() => {
+        fetch_('/auth/google/status').then(s => {
+          if (s.valid) { setStatus(true); setWorking(false); clearInterval(poll); }
+        });
+      }, 3000);
+      setTimeout(() => { clearInterval(poll); setWorking(false); }, 120000);
+    }).catch(() => setWorking(false));
+  };
+
+  if (status === null || status === true) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: '#7f1d1d', borderBottom: '1px solid #ef4444',
+      padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12,
+    }}>
+      <span style={{ color: '#fca5a5', fontSize: 13, flex: 1 }}>
+        ⚠️ <strong>Google authentication failed</strong> — token expired or revoked.
+        {detail ? ` (${detail})` : ''}
+      </span>
+      <button
+        className="btn btn-primary btn-sm"
+        onClick={reauth}
+        disabled={working}
+        style={{ background: '#ef4444', borderColor: '#ef4444', whiteSpace: 'nowrap' }}
+      >
+        {working ? 'Opening browser…' : '🔑 Re-authenticate Google'}
+      </button>
+      <button className="btn btn-ghost btn-sm" onClick={check} style={{ color: '#fca5a5' }}>Recheck</button>
+    </div>
+  );
+}
+
 function App() {
   const [page, setPage] = useState('dashboard');
   const [chatMeetingId, setChatMeetingId] = useState(null);
 
   return (
     <div>
+      <GoogleAuthBanner />
       <Sidebar page={page} setPage={setPage} />
       {page === 'chat' ? (
         // Chat gets fixed full-screen layout — rendered outside .main to avoid its padding

@@ -17,7 +17,6 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from agent.monitor import run_monitor
-from agent.digest import run_daily_summary, run_weekly_summary
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scheduler")
@@ -36,21 +35,6 @@ if len(parts) == 5:
         name="Drive Monitor",
     )
 
-# Daily summary at 8am UTC
-scheduler.add_job(
-    run_daily_summary,
-    CronTrigger(hour=8, minute=0),
-    id="daily_summary",
-    name="Daily Summary",
-)
-
-# Weekly summary on Monday 8:30am UTC
-scheduler.add_job(
-    run_weekly_summary,
-    CronTrigger(day_of_week="mon", hour=8, minute=30),
-    id="weekly_summary",
-    name="Weekly Summary",
-)
 
 
 def shutdown(signum, frame):

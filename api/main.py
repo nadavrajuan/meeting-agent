@@ -3,6 +3,7 @@
 
 import json
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -510,6 +511,88 @@ def trigger_daily(background_tasks: BackgroundTasks):
 def trigger_weekly(background_tasks: BackgroundTasks):
     background_tasks.add_task(run_weekly_summary)
     return {"message": "Weekly summary triggered"}
+
+
+# ─── Google Auth ─────────────────────────────────────────────────────────────
+
+_auth_lock = threading.Lock()
+
+def _token_path():
+    return os.getenv("GOOGLE_TOKEN_PATH", "token.json")
+
+def _credentials_path():
+    return os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+
+@app.get("/auth/google/status")
+def google_auth_status():
+    token_path = _token_path()
+    if not os.path.exists(token_path) or os.path.getsize(token_path) == 0:
+        return {"valid": False, "reason": "no_token"}
+    try:
+        from google.oauth2.credentials import Credentials
+        from agent.drive_service import SCOPES
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        if creds.valid:
+            return {"valid": True}
+        if creds.expired and creds.refresh_token:
+            try:
+                from google.auth.transport.requests import Request
+                creds.refresh(Request())
+                with open(token_path, "w") as f:
+                    f.write(creds.to_json())
+                return {"valid": True}
+            except Exception as e:
+                return {"valid": False, "reason": "token_expired", "detail": str(e)}
+        return {"valid": False, "reason": "no_refresh_token"}
+    except Exception as e:
+        return {"valid": False, "reason": "invalid_token", "detail": str(e)}
+
+
+@app.post("/auth/google/start")
+def google_auth_start():
+    """Kick off the OAuth flow. Returns the URL the user must visit."""
+    creds_path = _credentials_path()
+    if not os.path.exists(creds_path):
+        raise HTTPException(400, "credentials.json not found")
+
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from agent.drive_service import SCOPES
+
+    flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+    flow.redirect_uri = "http://localhost:8082/"
+    auth_url, state = flow.authorization_url(prompt="consent")
+
+    def _wait_for_callback():
+        import wsgiref.simple_server, wsgiref.util
+        from urllib.parse import urlparse, parse_qs
+
+        captured = {}
+
+        def wsgi_app(environ, start_response):
+            captured["uri"] = wsgiref.util.request_uri(environ)
+            start_response("200 OK", [("Content-Type", "text/html")])
+            return [b"<h1>Authentication complete. You may close this window.</h1>"]
+
+        server = wsgiref.simple_server.make_server("0.0.0.0", 8082, wsgi_app)
+        while True:
+            server.handle_request()
+            if "uri" in captured:
+                parsed = urlparse(captured["uri"])
+                if parse_qs(parsed.query).get("state", [None])[0] == state:
+                    break
+                captured.clear()
+
+        code = parse_qs(urlparse(captured["uri"]).query).get("code", [None])[0]
+        if code:
+            flow.fetch_token(code=code)
+            with open(_token_path(), "w") as f:
+                f.write(flow.credentials.to_json())
+
+    with _auth_lock:
+        t = threading.Thread(target=_wait_for_callback, daemon=True)
+        t.start()
+
+    return {"auth_url": auth_url}
 
 
 # ─── Graph Topology ──────────────────────────────────────────────────────────

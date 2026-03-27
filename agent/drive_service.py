@@ -36,11 +36,18 @@ def _run_oauth_flow(flow: InstalledAppFlow, port: int) -> Credentials:
     # Bind to 0.0.0.0 so Docker port-forwarding can reach us,
     # but tell Google to redirect to localhost (which the user's browser resolves)
     flow.redirect_uri = f"http://localhost:{port}/"
-    auth_url, _ = flow.authorization_url(prompt="consent")
+    auth_url, state = flow.authorization_url(prompt="consent")
     print(f"Please visit this URL to authorize:\n\n{auth_url}\n")
 
     server = wsgiref.simple_server.make_server("0.0.0.0", port, wsgi_app)
-    server.handle_request()
+    while True:
+        server.handle_request()
+        if "uri" in captured:
+            parsed_check = urlparse(captured["uri"])
+            if parse_qs(parsed_check.query).get("state", [None])[0] == state:
+                break
+            print(f"Ignoring stale callback (wrong state), waiting for new authorization...")
+            captured.clear()
 
     # Extract code from the captured redirect URI
     parsed = urlparse(captured["uri"])

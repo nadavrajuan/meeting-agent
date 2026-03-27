@@ -22,6 +22,7 @@ services:
     command: python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "${API_PORT:-8000}:8000"
+      - "8082:8082"
     volumes:
       - .:/app
       - ./credentials.json:/app/credentials.json:ro

@@ -1,0 +1,42 @@
+version: "3.9"
+
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  db:
+    ports: []  # not exposed publicly; internal only
+
+  api:
+    # No live-reload in production
+    command: python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+    # No code volume mount — use the built image
+    volumes:
+      - /opt/meeting-agent/credentials.json:/app/credentials.json:ro
+      - /opt/meeting-agent/token.json:/app/token.json
+    ports: []  # not exposed publicly; Traefik routes through frontend nginx
+
+  scheduler:
+    volumes:
+      - /opt/meeting-agent/credentials.json:/app/credentials.json:ro
+      - /opt/meeting-agent/token.json:/app/token.json
+    ports: []
+
+  frontend:
+    ports: []  # Traefik handles ingress
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meeting-agent.rule=Host(`meeting-agent.rajuan.app`)"
+      - "traefik.http.routers.meeting-agent.entrypoints=websecure"
+      - "traefik.http.routers.meeting-agent.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.meeting-agent.middlewares=meeting-agent-auth"
+      - "traefik.http.middlewares.meeting-agent-auth.basicauth.users=admin:$$apr1$$Fx3zQ4Ul$$U4k9QjV.o592EXtho3uKv1"
+      - "traefik.http.services.meeting-agent.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik"
+
+networks:
+  traefik:
+    external: true

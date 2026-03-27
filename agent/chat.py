@@ -399,7 +399,7 @@ class MeetingChatHandler:
                 messages=loop_msgs,
                 tools=CHAT_TOOLS,
                 tool_choice="auto",
-                timeout=120,
+                timeout=280,
             )
             msg = resp.choices[0].message
             if not msg.tool_calls:
@@ -425,7 +425,7 @@ class MeetingChatHandler:
             "content": "Please provide your final answer based on the information gathered.",
         })
         final = self.llm.client.chat.completions.create(
-            model=self.llm.model, messages=loop_msgs, timeout=120,
+            model=self.llm.model, messages=loop_msgs, timeout=280,
         )
         return final.choices[0].message.content or "", tool_calls_used, doc_urls
 
