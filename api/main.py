@@ -3,12 +3,14 @@
 
 import json
 import os
+import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import sys
@@ -277,6 +279,33 @@ def delete_context_note(note_id: str):
 class DeleteDBRequest(BaseModel):
     delete_labels: bool = False
     delete_people: bool = False
+
+
+@app.get("/db/backup")
+def backup_db():
+    host = os.getenv("POSTGRES_HOST", "db")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    user = os.getenv("POSTGRES_USER", "agent")
+    password = os.getenv("POSTGRES_PASSWORD", "changeme")
+    dbname = os.getenv("POSTGRES_DB", "meeting_agent")
+    filename = f"meeting_agent_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+
+    env = {**os.environ, "PGPASSWORD": password}
+    proc = subprocess.Popen(
+        ["pg_dump", "-h", host, "-p", port, "-U", user, dbname],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+    )
+
+    def stream():
+        for chunk in iter(lambda: proc.stdout.read(65536), b""):
+            yield chunk
+        proc.wait()
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.delete("/db")

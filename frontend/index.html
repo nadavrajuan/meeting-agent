@@ -182,87 +182,9 @@ function Sidebar({ page, setPage }) {
   );
 }
 
-// ─── Delete DB Modal ──────────────────────────────────────────────────────────
-function DeleteDBModal({ onClose, onDeleted }) {
-  const [deletePeople, setDeletePeople] = useState(false);
-  const [deleteLabels, setDeleteLabels] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const doDelete = async () => {
-    setLoading(true);
-    try {
-      await fetch_('/db', {
-        method: 'DELETE',
-        body: JSON.stringify({ delete_people: deletePeople, delete_labels: deleteLabels }),
-      });
-      onDeleted();
-      onClose();
-    } catch (e) {
-      alert('Error: ' + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 480 }}>
-        <div className="modal-title">🗑️ Clear Database</div>
-        <div className="warning-box">
-          ⚠️ <strong>Warning:</strong> This will permanently delete all meetings, action items, and run history. This cannot be undone.
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Always deleted:</div>
-          <div className="checkbox-row" style={{ opacity: 0.6 }}>
-            <input type="checkbox" checked disabled />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Meetings & Action Items</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>All processed meetings, summaries, and action items</div>
-            </div>
-          </div>
-          <div className="checkbox-row" style={{ opacity: 0.6 }}>
-            <input type="checkbox" checked disabled />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Agent Runs & State</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>Run history and last-processed timestamp</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>Optional (uncheck to keep):</div>
-          <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setDeletePeople(p => !p)}>
-            <input type="checkbox" checked={deletePeople} onChange={e => setDeletePeople(e.target.checked)} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>People & their labels</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>All people profiles and person→label assignments</div>
-            </div>
-          </div>
-          <div className="checkbox-row" style={{ cursor: 'pointer' }} onClick={() => setDeleteLabels(p => !p)}>
-            <input type="checkbox" checked={deleteLabels} onChange={e => setDeleteLabels(e.target.checked)} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>Labels</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>All label definitions (names, colors, keywords)</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button className="btn btn-ghost ml-auto" onClick={onClose}>Cancel</button>
-          <button className="btn btn-danger" onClick={doDelete} disabled={loading}>
-            {loading ? 'Deleting…' : '🗑️ Delete Now'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 function Dashboard({ setPage }) {
   const [stats, setStats] = useState(null);
-  const [showDelete, setShowDelete] = useState(false);
   const [settings, setSettings] = useState({
     last_n: 1,
     max_iterations: 1,
@@ -312,7 +234,7 @@ function Dashboard({ setPage }) {
     <div>
       <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
         <div className="page-title" style={{ margin: 0 }}>Dashboard</div>
-        <button className="btn btn-danger btn-sm" onClick={() => setShowDelete(true)}>🗑️ Clear DB</button>
+        <a className="btn btn-ghost btn-sm" href="/api/db/backup" download>⬇️ Download Backup</a>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 24 }}>
@@ -397,7 +319,6 @@ function Dashboard({ setPage }) {
         </div>
       </div>
 
-      {showDelete && <DeleteDBModal onClose={() => setShowDelete(false)} onDeleted={load} />}
     </div>
   );
 }
