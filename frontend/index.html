@@ -7,6 +7,7 @@
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/d3@7/dist/d3.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
@@ -664,50 +665,243 @@ function MeetingModal({ meeting, onClose }) {
 }
 
 // ─── People ───────────────────────────────────────────────────────────────────
+// ─── Person Network Graph (D3 force) ──────────────────────────────────────────
+function PersonNetworkGraph({ centerName, meetings }) {
+  const svgRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!meetings || !meetings.length || !svgRef.current) return;
+
+    const el = svgRef.current;
+    const width = el.clientWidth || 520;
+    const height = 380;
+
+    // Compute co-attendee counts and tag counts
+    const personCount = {};
+    const tagCount = {};
+    meetings.forEach(m => {
+      (m.labels || []).filter(Boolean).forEach(l => { tagCount[l] = (tagCount[l] || 0) + 1; });
+      (m.people || []).filter(Boolean).forEach(p => {
+        if (p !== centerName) personCount[p] = (personCount[p] || 0) + 1;
+      });
+    });
+
+    const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7);
+    const copeople = Object.entries(personCount).sort((a, b) => b[1] - a[1]);
+
+    const rCenter = 22;
+    const rPerson = d => Math.max(8, Math.min(18, 6 + Math.sqrt(d.value) * 4));
+    const rTag    = d => Math.max(6, Math.min(14, 4 + Math.sqrt(d.value) * 3));
+
+    const nodes = [
+      { id: centerName, type: 'center', value: meetings.length },
+      ...copeople.map(([name, count]) => ({ id: name,          type: 'person', value: count })),
+      ...topTags.map(([tag,  count]) => ({ id: 'tag:' + tag,  type: 'tag',    value: count, label: tag })),
+    ];
+    const links = [
+      ...copeople.map(([name, count]) => ({ source: centerName, target: name,          value: count, type: 'person' })),
+      ...topTags.map(([tag,  count]) => ({ source: centerName, target: 'tag:' + tag,  value: count, type: 'tag' })),
+    ];
+
+    const maxVal = Math.max(...links.map(l => l.value), 1);
+
+    d3.select(el).selectAll('*').remove();
+    const svg = d3.select(el).attr('width', width).attr('height', height);
+
+    // Arrow / glow defs
+    const defs = svg.append('defs');
+    const glow = defs.append('filter').attr('id', 'glow');
+    glow.append('feGaussianBlur').attr('stdDeviation', 3).attr('result', 'coloredBlur');
+    const merge = glow.append('feMerge');
+    merge.append('feMergeNode').attr('in', 'coloredBlur');
+    merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id)
+        .distance(d => 130 - (d.value / maxVal) * 50)
+        .strength(0.6))
+      .force('charge', d3.forceManyBody().strength(-220))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(d =>
+        d.type === 'center' ? rCenter + 14 : d.type === 'person' ? rPerson(d) + 10 : rTag(d) + 10));
+
+    const linkEl = svg.append('g').selectAll('line').data(links).join('line')
+      .attr('stroke', d => d.type === 'tag' ? '#f59e0b' : '#6366f1')
+      .attr('stroke-opacity', d => 0.25 + (d.value / maxVal) * 0.55)
+      .attr('stroke-width', d => 1 + (d.value / maxVal) * 4);
+
+    const nodeEl = svg.append('g').selectAll('g').data(nodes).join('g')
+      .style('cursor', d => d.type !== 'center' ? 'default' : 'default');
+
+    nodeEl.append('circle')
+      .attr('r', d => d.type === 'center' ? rCenter : d.type === 'person' ? rPerson(d) : rTag(d))
+      .attr('fill', d => d.type === 'center' ? '#6366f1' : d.type === 'person' ? '#3b82f6' : '#f59e0b')
+      .attr('fill-opacity', 0.9)
+      .attr('filter', d => d.type === 'center' ? 'url(#glow)' : null);
+
+    // Meeting count badge for center
+    nodeEl.filter(d => d.type === 'center').append('text')
+      .text(d => d.value)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .attr('fill', '#fff')
+      .attr('font-size', 11)
+      .attr('font-weight', 700);
+
+    // Value badge for others
+    nodeEl.filter(d => d.type !== 'center').append('text')
+      .text(d => d.value)
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .attr('fill', '#fff')
+      .attr('font-size', 9)
+      .attr('font-weight', 600);
+
+    // Labels below nodes
+    nodeEl.append('text')
+      .text(d => d.label || (d.type === 'center' ? d.id : d.id.length > 14 ? d.id.slice(0, 13) + '…' : d.id))
+      .attr('text-anchor', 'middle')
+      .attr('dy', d => (d.type === 'center' ? rCenter : d.type === 'person' ? rPerson(d) : rTag(d)) + 13)
+      .attr('fill', d => d.type === 'tag' ? '#fcd34d' : '#94a3b8')
+      .attr('font-size', d => d.type === 'center' ? 11 : 10)
+      .attr('font-weight', d => d.type === 'center' ? 700 : 400);
+
+    const pad = 30;
+    simulation.on('tick', () => {
+      linkEl
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      nodeEl.attr('transform', d =>
+        `translate(${Math.max(pad, Math.min(width - pad, d.x))},${Math.max(pad, Math.min(height - pad, d.y))})`);
+    });
+
+    return () => simulation.stop();
+  }, [centerName, meetings]);
+
+  return (
+    <svg ref={svgRef} style={{ width: '100%', height: 380, borderRadius: 8, background: '#0a1628', display: 'block' }} />
+  );
+}
+
+// ─── Person Detail ─────────────────────────────────────────────────────────────
 function PersonDetail({ person, onBack, onEdit }) {
   const [meetings, setMeetings] = useState(null);
+  const [viewMeeting, setViewMeeting] = useState(null);
 
   useEffect(() => {
     fetch_(`/people/${person.id}/meetings`).then(setMeetings).catch(() => setMeetings([]));
   }, [person.id]);
 
+  const openMeeting = (m) => {
+    fetch_(`/meetings/${m.id}`).then(setViewMeeting).catch(() => setViewMeeting(m));
+  };
+
+  // Aggregate tags
+  const tagCounts = {};
+  (meetings || []).forEach(m => (m.labels || []).filter(Boolean).forEach(l => { tagCounts[l] = (tagCounts[l] || 0) + 1; }));
+  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+  const maxTagCount = sortedTags[0]?.[1] || 1;
+
   return (
     <div>
-      <div className="flex items-center gap-3" style={{ marginBottom: 24 }}>
+      {/* Header */}
+      <div className="flex items-center gap-3" style={{ marginBottom: 20 }}>
         <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
         <div className="page-title" style={{ margin: 0 }}>{person.name}</div>
         <button className="btn btn-ghost btn-sm ml-auto" onClick={onEdit}>Edit</button>
       </div>
 
-      <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
-        <div className="flex gap-6" style={{ fontSize: 13, color: '#94a3b8' }}>
+      {/* Stats */}
+      <div className="card" style={{ padding: '12px 20px', marginBottom: 20 }}>
+        <div className="flex gap-6" style={{ fontSize: 13, color: '#94a3b8', flexWrap: 'wrap', gap: 16 }}>
           {person.email && <span>✉️ {person.email}</span>}
-          <span>🤝 {person.meeting_count || 0} meetings</span>
-          {(person.labels || []).filter(Boolean).length > 0 && (
-            <span>{(person.labels).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa', marginRight: 4 }}>{l}</span>)}</span>
-          )}
+          <span>🤝 <strong style={{ color: '#e2e8f0' }}>{person.meeting_count || 0}</strong> meetings</span>
+          {(person.labels || []).filter(Boolean).map(l =>
+            <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}
         </div>
-        {person.notes && <div style={{ marginTop: 10, fontSize: 13, color: '#cbd5e1' }}>{person.notes}</div>}
+        {person.notes && <div style={{ marginTop: 8, fontSize: 13, color: '#94a3b8' }}>{person.notes}</div>}
       </div>
 
-      <div className="card">
-        <div style={{ fontWeight: 600, marginBottom: 14, fontSize: 14 }}>Meetings</div>
-        {meetings === null && <div className="loading">Loading…</div>}
-        {meetings && meetings.length === 0 && <div className="empty">No meetings found</div>}
-        {meetings && meetings.map(m => (
-          <div key={m.id} style={{ borderBottom: '1px solid #1e293b', padding: '12px 0' }}>
-            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-              <span style={{ fontWeight: 500, fontSize: 14 }}>{m.title || m.folder_name}</span>
-              {m.meeting_date && <span className="text-muted text-sm ml-auto">{new Date(m.meeting_date).toLocaleDateString()}</span>}
+      {meetings === null && <div className="loading">Loading…</div>}
+
+      {meetings && meetings.length > 0 && (
+        <>
+          {/* Graph + Tags side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, marginBottom: 20 }}>
+            <div className="card" style={{ padding: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>
+                Network — <span style={{ color: '#6366f1' }}>●</span> you &nbsp;
+                <span style={{ color: '#3b82f6' }}>●</span> people &nbsp;
+                <span style={{ color: '#f59e0b' }}>●</span> tags &nbsp;
+                <span style={{ fontSize: 11 }}>(node size &amp; line thickness = shared meetings)</span>
+              </div>
+              <PersonNetworkGraph centerName={person.name} meetings={meetings} />
             </div>
-            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-              {(m.labels || []).filter(Boolean).map(l => <span key={l} className="badge badge-purple">{l}</span>)}
-              {(m.people || []).filter(Boolean).filter(n => n !== person.name).map(n => <span key={n} className="badge badge-blue">{n}</span>)}
+
+            <div className="card" style={{ padding: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Top Topics</div>
+              {sortedTags.length === 0 && <div className="text-muted text-sm">No labels yet</div>}
+              {sortedTags.map(([tag, count]) => (
+                <div key={tag} style={{ marginBottom: 10 }}>
+                  <div className="flex items-center" style={{ marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>{tag}</span>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>{count}</span>
+                  </div>
+                  <div style={{ height: 5, background: '#1e293b', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: (count / maxTagCount * 100) + '%', background: '#6366f1', borderRadius: 4, transition: 'width 0.4s' }} />
+                  </div>
+                </div>
+              ))}
             </div>
-            {m.summary && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{m.summary.slice(0, 180)}{m.summary.length > 180 ? '…' : ''}</div>}
           </div>
-        ))}
-      </div>
+
+          {/* Meeting cards */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', fontWeight: 600, fontSize: 14 }}>
+              Meetings ({meetings.length})
+            </div>
+            {meetings.map((m, i) => (
+              <div key={m.id}
+                onClick={() => openMeeting(m)}
+                style={{
+                  padding: '14px 20px',
+                  borderBottom: i < meetings.length - 1 ? '1px solid #1e293b' : 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#243040'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}
+              >
+                <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+                  <span style={{ fontWeight: 500, fontSize: 14, color: '#e2e8f0', flex: 1 }}>
+                    {m.drive_folder_name || m.title || m.folder_name}
+                  </span>
+                  {m.meeting_date && (
+                    <span style={{ fontSize: 11, color: '#475569', whiteSpace: 'nowrap' }}>
+                      {new Date(m.meeting_date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: '#6366f1' }}>View →</span>
+                </div>
+                <div className="flex gap-2" style={{ flexWrap: 'wrap', marginBottom: 4 }}>
+                  {(m.labels || []).filter(Boolean).map(l => <span key={l} className="badge badge-purple" style={{ fontSize: 11 }}>{l}</span>)}
+                  {(m.people || []).filter(Boolean).filter(n => n !== person.name).map(n =>
+                    <span key={n} className="badge badge-blue" style={{ fontSize: 11 }}>{n}</span>)}
+                </div>
+                {m.summary && (
+                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                    {m.summary.slice(0, 160)}{m.summary.length > 160 ? '…' : ''}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {meetings && meetings.length === 0 && <div className="empty">No meetings found</div>}
+
+      {viewMeeting && <MeetingModal meeting={viewMeeting} onClose={() => setViewMeeting(null)} />}
     </div>
   );
 }
