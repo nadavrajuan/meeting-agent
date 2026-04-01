@@ -545,12 +545,19 @@ def trigger_weekly(background_tasks: BackgroundTasks):
 # ─── Google Auth ─────────────────────────────────────────────────────────────
 
 _auth_lock = threading.Lock()
+_pending_flows: dict = {}  # state -> flow (for web callback)
 
 def _token_path():
     return os.getenv("GOOGLE_TOKEN_PATH", "token.json")
 
 def _credentials_path():
     return os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+
+def _oauth_redirect_uri():
+    app_url = os.getenv("APP_URL", "").rstrip("/")
+    if app_url:
+        return f"{app_url}/api/auth/google/callback"
+    return "http://localhost:8082/"
 
 @app.get("/auth/google/status")
 def google_auth_status():
@@ -584,44 +591,67 @@ def google_auth_start():
     if not os.path.exists(creds_path):
         raise HTTPException(400, "credentials.json not found")
 
-    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google_auth_oauthlib.flow import InstalledAppFlow, Flow
     from agent.drive_service import SCOPES
 
-    flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-    flow.redirect_uri = "http://localhost:8082/"
-    auth_url, state = flow.authorization_url(prompt="consent")
+    redirect_uri = _oauth_redirect_uri()
 
-    def _wait_for_callback():
-        import wsgiref.simple_server, wsgiref.util
-        from urllib.parse import urlparse, parse_qs
+    if redirect_uri.startswith("http://localhost"):
+        # Dev: spin up a local callback server on port 8082
+        flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+        flow.redirect_uri = redirect_uri
+        auth_url, state = flow.authorization_url(prompt="consent")
 
-        captured = {}
+        def _wait_for_callback():
+            import wsgiref.simple_server, wsgiref.util
+            from urllib.parse import urlparse, parse_qs
+            captured = {}
 
-        def wsgi_app(environ, start_response):
-            captured["uri"] = wsgiref.util.request_uri(environ)
-            start_response("200 OK", [("Content-Type", "text/html")])
-            return [b"<h1>Authentication complete. You may close this window.</h1>"]
+            def wsgi_app(environ, start_response):
+                captured["uri"] = wsgiref.util.request_uri(environ)
+                start_response("200 OK", [("Content-Type", "text/html")])
+                return [b"<h1>Authentication complete. You may close this window.</h1>"]
 
-        server = wsgiref.simple_server.make_server("0.0.0.0", 8082, wsgi_app)
-        while True:
-            server.handle_request()
-            if "uri" in captured:
-                parsed = urlparse(captured["uri"])
-                if parse_qs(parsed.query).get("state", [None])[0] == state:
-                    break
-                captured.clear()
+            server = wsgiref.simple_server.make_server("0.0.0.0", 8082, wsgi_app)
+            while True:
+                server.handle_request()
+                if "uri" in captured:
+                    parsed = urlparse(captured["uri"])
+                    if parse_qs(parsed.query).get("state", [None])[0] == state:
+                        break
+                    captured.clear()
 
-        code = parse_qs(urlparse(captured["uri"]).query).get("code", [None])[0]
-        if code:
-            flow.fetch_token(code=code)
-            with open(_token_path(), "w") as f:
-                f.write(flow.credentials.to_json())
+            code = parse_qs(urlparse(captured["uri"]).query).get("code", [None])[0]
+            if code:
+                flow.fetch_token(code=code)
+                with open(_token_path(), "w") as f:
+                    f.write(flow.credentials.to_json())
 
-    with _auth_lock:
-        t = threading.Thread(target=_wait_for_callback, daemon=True)
-        t.start()
+        with _auth_lock:
+            t = threading.Thread(target=_wait_for_callback, daemon=True)
+            t.start()
+    else:
+        # Production: use FastAPI callback endpoint
+        flow = Flow.from_client_secrets_file(creds_path, SCOPES, redirect_uri=redirect_uri)
+        auth_url, state = flow.authorization_url(prompt="consent", access_type="offline")
+        _pending_flows[state] = flow
 
     return {"auth_url": auth_url}
+
+
+@app.get("/auth/google/callback")
+def google_auth_callback(code: str = None, state: str = None, error: str = None):
+    """OAuth2 callback — Google redirects here after the user grants access."""
+    from fastapi.responses import HTMLResponse
+    if error:
+        return HTMLResponse(f"<h2>Authentication failed: {error}</h2><p>You may close this window.</p>", status_code=400)
+    flow = _pending_flows.pop(state, None)
+    if not flow:
+        return HTMLResponse("<h2>Invalid or expired session.</h2><p>Please try again from the app.</p>", status_code=400)
+    flow.fetch_token(code=code)
+    with open(_token_path(), "w") as f:
+        f.write(flow.credentials.to_json())
+    return HTMLResponse("<h2>Authentication complete.</h2><p>You may close this window and return to the app.</p>")
 
 
 # ─── Graph Topology ──────────────────────────────────────────────────────────
