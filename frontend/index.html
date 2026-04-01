@@ -668,106 +668,193 @@ function MeetingModal({ meeting, onClose }) {
 // ─── Person Network Graph (D3 force) ──────────────────────────────────────────
 function PersonNetworkGraph({ centerName, meetings }) {
   const svgRef = React.useRef(null);
+  const containerRef = React.useRef(null);
 
-  useEffect(() => {
-    if (!meetings || !meetings.length || !svgRef.current) return;
+  React.useEffect(() => {
+    if (!meetings || !meetings.length || !svgRef.current || !containerRef.current) return;
 
     const el = svgRef.current;
-    const width = el.clientWidth || 520;
-    const height = 380;
+    const container = containerRef.current;
+    const width = container.clientWidth || 700;
+    const height = 460;
 
-    // Compute co-attendee counts and tag counts
-    const personCount = {};
-    const tagCount = {};
+    // Count tag/attendee frequency across all meetings
+    const tagFreq = {}, personFreq = {};
     meetings.forEach(m => {
-      (m.labels || []).filter(Boolean).forEach(l => { tagCount[l] = (tagCount[l] || 0) + 1; });
-      (m.people || []).filter(Boolean).forEach(p => {
-        if (p !== centerName) personCount[p] = (personCount[p] || 0) + 1;
+      (m.labels || []).filter(Boolean).forEach(l => { tagFreq[l] = (tagFreq[l] || 0) + 1; });
+      (m.people || []).filter(Boolean).filter(p => p !== centerName).forEach(p => {
+        personFreq[p] = (personFreq[p] || 0) + 1;
       });
     });
 
-    const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 7);
-    const copeople = Object.entries(personCount).sort((a, b) => b[1] - a[1]);
+    const nodes = [], links = [], nodeSet = new Set();
 
-    const rCenter = 22;
-    const rPerson = d => Math.max(8, Math.min(18, 6 + Math.sqrt(d.value) * 4));
-    const rTag    = d => Math.max(6, Math.min(14, 4 + Math.sqrt(d.value) * 3));
+    // Center node
+    nodes.push({ id: '__center__', label: centerName, type: 'center', value: meetings.length });
+    nodeSet.add('__center__');
 
-    const nodes = [
-      { id: centerName, type: 'center', value: meetings.length },
-      ...copeople.map(([name, count]) => ({ id: name,          type: 'person', value: count })),
-      ...topTags.map(([tag,  count]) => ({ id: 'tag:' + tag,  type: 'tag',    value: count, label: tag })),
-    ];
-    const links = [
-      ...copeople.map(([name, count]) => ({ source: centerName, target: name,          value: count, type: 'person' })),
-      ...topTags.map(([tag,  count]) => ({ source: centerName, target: 'tag:' + tag,  value: count, type: 'tag' })),
-    ];
+    // Meeting nodes (level 1) + tag/attendee leaf nodes (level 2)
+    meetings.forEach(m => {
+      const mid = 'meeting__' + m.id;
+      const raw = m.drive_folder_name || m.title || m.folder_name || 'Meeting';
+      const mLabel = raw.length > 18 ? raw.slice(0, 17) + '…' : raw;
+      const leafCount = (m.labels || []).filter(Boolean).length +
+                        (m.people || []).filter(Boolean).filter(p => p !== centerName).length;
+      if (!nodeSet.has(mid)) {
+        nodes.push({ id: mid, label: mLabel, fullLabel: raw, type: 'meeting', value: leafCount });
+        nodeSet.add(mid);
+      }
+      links.push({ source: '__center__', target: mid, type: 'center-meeting' });
 
-    const maxVal = Math.max(...links.map(l => l.value), 1);
+      (m.labels || []).filter(Boolean).forEach(tag => {
+        const tid = 'tag__' + tag;
+        if (!nodeSet.has(tid)) {
+          nodes.push({ id: tid, label: tag, type: 'tag', value: tagFreq[tag] });
+          nodeSet.add(tid);
+        }
+        links.push({ source: mid, target: tid, type: 'meeting-tag' });
+      });
+
+      (m.people || []).filter(Boolean).filter(p => p !== centerName).forEach(person => {
+        const pid = 'person__' + person;
+        if (!nodeSet.has(pid)) {
+          const pl = person.length > 15 ? person.slice(0, 14) + '…' : person;
+          nodes.push({ id: pid, label: pl, fullLabel: person, type: 'attendee', value: personFreq[person] });
+          nodeSet.add(pid);
+        }
+        links.push({ source: mid, target: pid, type: 'meeting-attendee' });
+      });
+    });
+
+    const maxMeet = Math.max(...nodes.filter(n => n.type === 'meeting').map(n => n.value), 1);
+    const maxLeaf = Math.max(...nodes.filter(n => n.type !== 'center' && n.type !== 'meeting').map(n => n.value), 1);
+
+    const nr = d => {
+      if (d.type === 'center')   return 26;
+      if (d.type === 'meeting')  return Math.max(10, Math.min(20, 8 + (d.value / maxMeet) * 12));
+      return Math.max(6, Math.min(14, 5 + (d.value / maxLeaf) * 8));
+    };
+
+    const nodeColor = d => {
+      if (d.type === 'center')   return '#6366f1';
+      if (d.type === 'meeting')  return '#0ea5e9';
+      if (d.type === 'tag')      return '#f59e0b';
+      return '#22d3ee'; // attendee
+    };
+    const labelColor = d => {
+      if (d.type === 'center')   return '#c4b5fd';
+      if (d.type === 'meeting')  return '#7dd3fc';
+      if (d.type === 'tag')      return '#fcd34d';
+      return '#67e8f9';
+    };
+    const linkColor = d => {
+      if (d.type === 'center-meeting') return '#6366f1';
+      if (d.type === 'meeting-tag')    return '#f59e0b';
+      return '#22d3ee';
+    };
 
     d3.select(el).selectAll('*').remove();
+    container.querySelectorAll('.pg-tooltip').forEach(n => n.remove());
+
     const svg = d3.select(el).attr('width', width).attr('height', height);
 
-    // Arrow / glow defs
     const defs = svg.append('defs');
-    const glow = defs.append('filter').attr('id', 'glow');
-    glow.append('feGaussianBlur').attr('stdDeviation', 3).attr('result', 'coloredBlur');
-    const merge = glow.append('feMerge');
-    merge.append('feMergeNode').attr('in', 'coloredBlur');
-    merge.append('feMergeNode').attr('in', 'SourceGraphic');
+    const glow = defs.append('filter').attr('id', 'pg-glow');
+    glow.append('feGaussianBlur').attr('stdDeviation', 4).attr('result', 'cb');
+    const fm = glow.append('feMerge');
+    fm.append('feMergeNode').attr('in', 'cb');
+    fm.append('feMergeNode').attr('in', 'SourceGraphic');
 
-    const simulation = d3.forceSimulation(nodes)
+    // Tooltip div
+    const tip = document.createElement('div');
+    tip.className = 'pg-tooltip';
+    Object.assign(tip.style, {
+      position: 'absolute', background: '#1e293b', border: '1px solid #334155',
+      borderRadius: '6px', padding: '5px 10px', fontSize: '12px', color: '#e2e8f0',
+      pointerEvents: 'none', opacity: '0', zIndex: '10', whiteSpace: 'nowrap',
+      transition: 'opacity 0.15s',
+    });
+    container.appendChild(tip);
+
+    // Zoom/pan
+    const g = svg.append('g');
+    svg.call(d3.zoom().scaleExtent([0.25, 3]).on('zoom', e => g.attr('transform', e.transform)));
+
+    const sim = d3.forceSimulation(nodes)
       .force('link', d3.forceLink(links).id(d => d.id)
-        .distance(d => 130 - (d.value / maxVal) * 50)
-        .strength(0.6))
-      .force('charge', d3.forceManyBody().strength(-220))
+        .distance(d => d.type === 'center-meeting' ? 130 : 85).strength(0.5))
+      .force('charge', d3.forceManyBody().strength(d =>
+        d.type === 'center' ? -500 : d.type === 'meeting' ? -280 : -130))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d =>
-        d.type === 'center' ? rCenter + 14 : d.type === 'person' ? rPerson(d) + 10 : rTag(d) + 10));
+      .force('collision', d3.forceCollide().radius(d => nr(d) + 16));
 
-    const linkEl = svg.append('g').selectAll('line').data(links).join('line')
-      .attr('stroke', d => d.type === 'tag' ? '#f59e0b' : '#6366f1')
-      .attr('stroke-opacity', d => 0.25 + (d.value / maxVal) * 0.55)
-      .attr('stroke-width', d => 1 + (d.value / maxVal) * 4);
+    const linkEl = g.append('g').selectAll('line').data(links).join('line')
+      .attr('stroke', linkColor)
+      .attr('stroke-opacity', 0.5)
+      .attr('stroke-width', d => d.type === 'center-meeting' ? 2.5 : 1.5);
 
-    const nodeEl = svg.append('g').selectAll('g').data(nodes).join('g')
-      .style('cursor', d => d.type !== 'center' ? 'default' : 'default');
+    const drag = d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; });
+
+    const nodeEl = g.append('g').selectAll('g').data(nodes).join('g')
+      .style('cursor', 'grab')
+      .call(drag);
 
     nodeEl.append('circle')
-      .attr('r', d => d.type === 'center' ? rCenter : d.type === 'person' ? rPerson(d) : rTag(d))
-      .attr('fill', d => d.type === 'center' ? '#6366f1' : d.type === 'person' ? '#3b82f6' : '#f59e0b')
-      .attr('fill-opacity', 0.9)
-      .attr('filter', d => d.type === 'center' ? 'url(#glow)' : null);
+      .attr('r', d => nr(d))
+      .attr('fill', nodeColor)
+      .attr('fill-opacity', 0.92)
+      .attr('stroke', d => d.type === 'center' ? '#a78bfa' : 'none')
+      .attr('stroke-width', d => d.type === 'center' ? 2.5 : 0)
+      .attr('filter', d => d.type === 'center' ? 'url(#pg-glow)' : null);
 
-    // Meeting count badge for center
-    nodeEl.filter(d => d.type === 'center').append('text')
-      .text(d => d.value)
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .attr('fill', '#fff')
-      .attr('font-size', 11)
-      .attr('font-weight', 700);
-
-    // Value badge for others
-    nodeEl.filter(d => d.type !== 'center').append('text')
-      .text(d => d.value)
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .attr('fill', '#fff')
-      .attr('font-size', 9)
-      .attr('font-weight', 600);
-
-    // Labels below nodes
     nodeEl.append('text')
-      .text(d => d.label || (d.type === 'center' ? d.id : d.id.length > 14 ? d.id.slice(0, 13) + '…' : d.id))
+      .text(d => d.label)
       .attr('text-anchor', 'middle')
-      .attr('dy', d => (d.type === 'center' ? rCenter : d.type === 'person' ? rPerson(d) : rTag(d)) + 13)
-      .attr('fill', d => d.type === 'tag' ? '#fcd34d' : '#94a3b8')
-      .attr('font-size', d => d.type === 'center' ? 11 : 10)
-      .attr('font-weight', d => d.type === 'center' ? 700 : 400);
+      .attr('dy', d => nr(d) + 13)
+      .attr('fill', labelColor)
+      .attr('font-size', d => d.type === 'center' ? 12 : 10)
+      .attr('font-weight', d => d.type === 'center' ? 700 : 400)
+      .style('pointer-events', 'none');
 
-    const pad = 30;
-    simulation.on('tick', () => {
+    // Hover: highlight connected, show tooltip
+    const linkedIdx = {};
+    links.forEach(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      linkedIdx[s + '__' + t] = true;
+      linkedIdx[t + '__' + s] = true;
+    });
+    const connected = (a, b) => a === b || !!linkedIdx[a + '__' + b];
+
+    nodeEl
+      .on('mouseover', function(e, d) {
+        const typeLabel = d.type === 'center' ? 'you' : d.type;
+        tip.textContent = (d.fullLabel || d.label) + '  (' + typeLabel + ')';
+        tip.style.opacity = '1';
+        nodeEl.select('circle').style('opacity', n => connected(d.id, n.id) ? 1 : 0.12);
+        nodeEl.select('text').style('opacity', n => connected(d.id, n.id) ? 1 : 0.08);
+        linkEl.style('opacity', l => {
+          const s = l.source.id || l.source, t = l.target.id || l.target;
+          return s === d.id || t === d.id ? 1 : 0.05;
+        });
+      })
+      .on('mousemove', function(e) {
+        const rect = container.getBoundingClientRect();
+        tip.style.left = (e.clientX - rect.left + 14) + 'px';
+        tip.style.top  = (e.clientY - rect.top - 32) + 'px';
+      })
+      .on('mouseout', function() {
+        tip.style.opacity = '0';
+        nodeEl.select('circle').style('opacity', 1);
+        nodeEl.select('text').style('opacity', 1);
+        linkEl.style('opacity', 0.5);
+      });
+
+    const pad = 40;
+    sim.on('tick', () => {
       linkEl
         .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
@@ -775,11 +862,13 @@ function PersonNetworkGraph({ centerName, meetings }) {
         `translate(${Math.max(pad, Math.min(width - pad, d.x))},${Math.max(pad, Math.min(height - pad, d.y))})`);
     });
 
-    return () => simulation.stop();
+    return () => { sim.stop(); tip.remove(); };
   }, [centerName, meetings]);
 
   return (
-    <svg ref={svgRef} style={{ width: '100%', height: 380, borderRadius: 8, background: '#0a1628', display: 'block' }} />
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <svg ref={svgRef} style={{ width: '100%', height: 460, borderRadius: 8, background: '#0a1628', display: 'block' }} />
+    </div>
   );
 }
 
@@ -796,11 +885,10 @@ function PersonDetail({ person, onBack, onEdit }) {
     fetch_(`/meetings/${m.id}`).then(setViewMeeting).catch(() => setViewMeeting(m));
   };
 
-  // Aggregate tags
+  // Aggregate tags sorted by frequency, max 10
   const tagCounts = {};
   (meetings || []).forEach(m => (m.labels || []).filter(Boolean).forEach(l => { tagCounts[l] = (tagCounts[l] || 0) + 1; }));
-  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-  const maxTagCount = sortedTags[0]?.[1] || 1;
+  const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   return (
     <div>
@@ -811,14 +899,22 @@ function PersonDetail({ person, onBack, onEdit }) {
         <button className="btn btn-ghost btn-sm ml-auto" onClick={onEdit}>Edit</button>
       </div>
 
-      {/* Stats */}
+      {/* Stats + inline topics */}
       <div className="card" style={{ padding: '12px 20px', marginBottom: 20 }}>
-        <div className="flex gap-6" style={{ fontSize: 13, color: '#94a3b8', flexWrap: 'wrap', gap: 16 }}>
+        <div className="flex gap-6" style={{ fontSize: 13, color: '#94a3b8', flexWrap: 'wrap', gap: 16, marginBottom: sortedTags.length ? 10 : 0 }}>
           {person.email && <span>✉️ {person.email}</span>}
           <span>🤝 <strong style={{ color: '#e2e8f0' }}>{person.meeting_count || 0}</strong> meetings</span>
           {(person.labels || []).filter(Boolean).map(l =>
             <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}
         </div>
+        {sortedTags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#64748b', marginRight: 4 }}>Topics:</span>
+            {sortedTags.map(([tag]) => (
+              <span key={tag} className="tag" style={{ background: '#2a1f00', color: '#fbbf24', fontSize: 11 }}>{tag}</span>
+            ))}
+          </div>
+        )}
         {person.notes && <div style={{ marginTop: 8, fontSize: 13, color: '#94a3b8' }}>{person.notes}</div>}
       </div>
 
@@ -826,37 +922,8 @@ function PersonDetail({ person, onBack, onEdit }) {
 
       {meetings && meetings.length > 0 && (
         <>
-          {/* Graph + Tags side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, marginBottom: 20 }}>
-            <div className="card" style={{ padding: 16 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>
-                Network — <span style={{ color: '#6366f1' }}>●</span> you &nbsp;
-                <span style={{ color: '#3b82f6' }}>●</span> people &nbsp;
-                <span style={{ color: '#f59e0b' }}>●</span> tags &nbsp;
-                <span style={{ fontSize: 11 }}>(node size &amp; line thickness = shared meetings)</span>
-              </div>
-              <PersonNetworkGraph centerName={person.name} meetings={meetings} />
-            </div>
-
-            <div className="card" style={{ padding: 16 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Top Topics</div>
-              {sortedTags.length === 0 && <div className="text-muted text-sm">No labels yet</div>}
-              {sortedTags.map(([tag, count]) => (
-                <div key={tag} style={{ marginBottom: 10 }}>
-                  <div className="flex items-center" style={{ marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>{tag}</span>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>{count}</span>
-                  </div>
-                  <div style={{ height: 5, background: '#1e293b', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: (count / maxTagCount * 100) + '%', background: '#6366f1', borderRadius: 4, transition: 'width 0.4s' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Meeting cards */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Meetings first */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #334155', fontWeight: 600, fontSize: 14 }}>
               Meetings ({meetings.length})
             </div>
@@ -883,18 +950,40 @@ function PersonDetail({ person, onBack, onEdit }) {
                   )}
                   <span style={{ fontSize: 11, color: '#6366f1' }}>View →</span>
                 </div>
-                <div className="flex gap-2" style={{ flexWrap: 'wrap', marginBottom: 4 }}>
-                  {(m.labels || []).filter(Boolean).map(l => <span key={l} className="badge badge-purple" style={{ fontSize: 11 }}>{l}</span>)}
-                  {(m.people || []).filter(Boolean).filter(n => n !== person.name).map(n =>
-                    <span key={n} className="badge badge-blue" style={{ fontSize: 11 }}>{n}</span>)}
-                </div>
+                {/* Labels row */}
+                {(m.labels || []).filter(Boolean).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                    {(m.labels || []).filter(Boolean).map(l =>
+                      <span key={l} className="badge badge-purple" style={{ fontSize: 11 }}>{l}</span>)}
+                  </div>
+                )}
+                {/* People row */}
+                {(m.people || []).filter(Boolean).filter(n => n !== person.name).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                    {(m.people || []).filter(Boolean).filter(n => n !== person.name).map(n =>
+                      <span key={n} className="badge badge-blue" style={{ fontSize: 11 }}>{n}</span>)}
+                  </div>
+                )}
                 {m.summary && (
-                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5, marginTop: 2 }}>
                     {m.summary.slice(0, 160)}{m.summary.length > 160 ? '…' : ''}
                   </div>
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Network graph below */}
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: '#94a3b8', marginBottom: 10 }}>
+              Network &nbsp;
+              <span style={{ color: '#6366f1' }}>●</span> you &nbsp;
+              <span style={{ color: '#0ea5e9' }}>●</span> meetings &nbsp;
+              <span style={{ color: '#f59e0b' }}>●</span> topics &nbsp;
+              <span style={{ color: '#22d3ee' }}>●</span> people &nbsp;
+              <span style={{ fontSize: 11, color: '#475569' }}>(drag nodes · scroll to zoom · hover to highlight)</span>
+            </div>
+            <PersonNetworkGraph centerName={person.name} meetings={meetings} />
           </div>
         </>
       )}
