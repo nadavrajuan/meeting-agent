@@ -77,6 +77,12 @@ def get_people():
         return db.get_all_people()
 
 
+@app.get("/people/{person_id}/meetings")
+def get_person_meetings(person_id: str):
+    with DB() as db:
+        return db.get_person_meetings(person_id)
+
+
 @app.put("/people/{person_id}")
 def update_person(person_id: str, body: PersonUpdate):
     with DB() as db:

@@ -664,10 +664,60 @@ function MeetingModal({ meeting, onClose }) {
 }
 
 // ─── People ───────────────────────────────────────────────────────────────────
+function PersonDetail({ person, onBack, onEdit }) {
+  const [meetings, setMeetings] = useState(null);
+
+  useEffect(() => {
+    fetch_(`/people/${person.id}/meetings`).then(setMeetings).catch(() => setMeetings([]));
+  }, [person.id]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-3" style={{ marginBottom: 24 }}>
+        <button className="btn btn-ghost btn-sm" onClick={onBack}>← Back</button>
+        <div className="page-title" style={{ margin: 0 }}>{person.name}</div>
+        <button className="btn btn-ghost btn-sm ml-auto" onClick={onEdit}>Edit</button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20, padding: '16px 20px' }}>
+        <div className="flex gap-6" style={{ fontSize: 13, color: '#94a3b8' }}>
+          {person.email && <span>✉️ {person.email}</span>}
+          <span>🤝 {person.meeting_count || 0} meetings</span>
+          {(person.labels || []).filter(Boolean).length > 0 && (
+            <span>{(person.labels).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa', marginRight: 4 }}>{l}</span>)}</span>
+          )}
+        </div>
+        {person.notes && <div style={{ marginTop: 10, fontSize: 13, color: '#cbd5e1' }}>{person.notes}</div>}
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight: 600, marginBottom: 14, fontSize: 14 }}>Meetings</div>
+        {meetings === null && <div className="loading">Loading…</div>}
+        {meetings && meetings.length === 0 && <div className="empty">No meetings found</div>}
+        {meetings && meetings.map(m => (
+          <div key={m.id} style={{ borderBottom: '1px solid #1e293b', padding: '12px 0' }}>
+            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+              <span style={{ fontWeight: 500, fontSize: 14 }}>{m.title || m.folder_name}</span>
+              {m.meeting_date && <span className="text-muted text-sm ml-auto">{new Date(m.meeting_date).toLocaleDateString()}</span>}
+            </div>
+            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+              {(m.labels || []).filter(Boolean).map(l => <span key={l} className="badge badge-purple">{l}</span>)}
+              {(m.people || []).filter(Boolean).filter(n => n !== person.name).map(n => <span key={n} className="badge badge-blue">{n}</span>)}
+            </div>
+            {m.summary && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{m.summary.slice(0, 180)}{m.summary.length > 180 ? '…' : ''}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function People() {
   const [people, setPeople] = useState([]);
   const [labels, setLabels] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     fetch_('/people').then(setPeople);
@@ -679,30 +729,49 @@ function People() {
       method: 'PUT',
       body: JSON.stringify({ email, notes, label_ids: labelIds }),
     });
-    fetch_('/people').then(setPeople);
+    const updated = await fetch_('/people');
+    setPeople(updated);
+    if (selected) setSelected(updated.find(p => p.id === selected.id) || null);
     setEditing(null);
   };
+
+  const filtered = people.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (selected) {
+    return <PersonDetail
+      person={selected}
+      onBack={() => setSelected(null)}
+      onEdit={() => setEditing(selected)}
+    />;
+  }
 
   return (
     <div>
       <div className="page-title">People</div>
       <div className="card">
+        <input
+          placeholder="Search people…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ marginBottom: 16, width: '100%', maxWidth: 320 }}
+        />
         <table className="table">
           <thead>
-            <tr><th>Name</th><th>Email</th><th>Labels</th><th>Action</th></tr>
+            <tr><th>Name</th><th>Email</th><th>Meetings</th><th>Labels</th><th>Action</th></tr>
           </thead>
           <tbody>
-            {people.map(p => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: 500 }}>{p.name}</td>
-                <td className="text-muted text-sm">{p.email || '—'}</td>
-                <td>{(p.labels || []).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}</td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>Edit</button></td>
+            {filtered.map(p => (
+              <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(p)}>
+                <td style={{ fontWeight: 500, color: '#a78bfa' }}>{p.name}</td>
+                <td className="text-muted text-sm" onClick={e => e.stopPropagation()}>{p.email || '—'}</td>
+                <td className="text-sm" style={{ color: '#94a3b8' }}>{p.meeting_count || 0}</td>
+                <td onClick={e => e.stopPropagation()}>{(p.labels || []).filter(Boolean).map(l => <span key={l} className="tag" style={{ background: '#334155', color: '#a78bfa' }}>{l}</span>)}</td>
+                <td onClick={e => e.stopPropagation()}><button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>Edit</button></td>
               </tr>
             ))}
           </tbody>
         </table>
-        {people.length === 0 && <div className="empty">No people yet — they appear after meetings are processed</div>}
+        {filtered.length === 0 && <div className="empty">{search ? 'No people match your search' : 'No people yet — they appear after meetings are processed'}</div>}
       </div>
       {editing && <PersonModal person={editing} labels={labels} onSave={save} onClose={() => setEditing(null)} />}
     </div>

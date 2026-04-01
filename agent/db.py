@@ -114,11 +114,30 @@ class DB:
 
     def get_all_people(self) -> list[dict]:
         return self.fetchall(
-            "SELECT p.*, array_agg(l.name) FILTER (WHERE l.name IS NOT NULL) as labels "
+            "SELECT p.*, "
+            "array_agg(DISTINCT l.name) FILTER (WHERE l.name IS NOT NULL) as labels, "
+            "COUNT(DISTINCT mp.meeting_id) as meeting_count "
             "FROM people p "
             "LEFT JOIN people_labels pl ON pl.person_id = p.id "
             "LEFT JOIN labels l ON l.id = pl.label_id "
+            "LEFT JOIN meeting_people mp ON mp.person_id = p.id "
             "GROUP BY p.id ORDER BY p.name"
+        )
+
+    def get_person_meetings(self, person_id: str) -> list[dict]:
+        return self.fetchall(
+            "SELECT DISTINCT m.*, "
+            "array_agg(DISTINCT l.name) FILTER (WHERE l.name IS NOT NULL) as labels, "
+            "array_agg(DISTINCT pe.name) FILTER (WHERE pe.name IS NOT NULL) as people "
+            "FROM meetings m "
+            "JOIN meeting_people mp ON mp.meeting_id = m.id "
+            "LEFT JOIN meeting_labels ml ON ml.meeting_id = m.id "
+            "LEFT JOIN labels l ON l.id = ml.label_id "
+            "LEFT JOIN meeting_people mp2 ON mp2.meeting_id = m.id "
+            "LEFT JOIN people pe ON pe.id = mp2.person_id "
+            "WHERE mp.person_id = %s "
+            "GROUP BY m.id ORDER BY m.meeting_date DESC NULLS LAST",
+            (person_id,)
         )
 
     # ── Labels ────────────────────────────────────────────────────────────
